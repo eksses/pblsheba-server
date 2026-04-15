@@ -1,7 +1,7 @@
 const supabase = require('../utils/supabase');
 const bcrypt = require('bcrypt');
 const SystemLog = require('../models/SystemLog');
-const { cacheData, getCachedData, removeCachedData } = require('../utils/redis');
+const { cacheData, getCachedData, clearCache } = require('../utils/redis');
 
 // @desc    Approve/Reject a pending member
 // @route   PATCH /api/admin/approve/:id
@@ -423,8 +423,8 @@ const updateSettings = async (req, res) => {
     }
 
     // Invalidate caches
-    await removeCachedData('system_settings');
-    await removeCachedData('public_settings');
+    await clearCache('system_settings');
+    await clearCache('public_settings');
 
     await SystemLog.create({
       level: 'info',
