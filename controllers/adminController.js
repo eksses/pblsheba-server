@@ -51,15 +51,25 @@ const approveUser = async (req, res) => {
 // @access  Private (Owner/Employee)
 const getMetrics = async (req, res) => {
   try {
-    const { count: totalMembers } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'member');
-    const { count: totalEmployees } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'employee');
-    const { count: pendingApprovals } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
-
-    // Get settings for calculation
-    const { data: settings } = await supabase.from('Setting').select('registrationFee').eq('id', 1).single();
+    const { data: settings } = await supabase.from('Setting').select('registrationFee, employeeCanViewAll').eq('id', 1).single();
     const fee = settings?.registrationFee || 365;
+    const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
 
-    const { count: approvedMembers } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
+    let totalQC = supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'member');
+    let approvedQC = supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
+    let pendingQC = supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
+
+    if (!canViewAll) {
+       totalQC = totalQC.eq('referredById', req.user.id);
+       approvedQC = approvedQC.eq('referredById', req.user.id);
+       pendingQC = pendingQC.eq('referredById', req.user.id);
+    }
+
+    const { count: totalMembers } = await totalQC;
+    const { count: pendingApprovals } = await pendingQC;
+    const { count: approvedMembers } = await approvedQC;
+    const { count: totalEmployees } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'employee');
+
     const totalCollected = (approvedMembers || 0) * fee;
 
     res.json({
@@ -78,12 +88,20 @@ const getMetrics = async (req, res) => {
 // @access  Private (Owner/Employee)
 const getPendingMembers = async (req, res) => {
   try {
-    const { data: pendingUsers, error } = await supabase
+    const { data: settings } = await supabase.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
+    const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
+
+    let query = supabase
       .from('User')
       .select('*')
       .eq('status', 'pending')
-      .eq('role', 'member')
-      .order('createdAt', { ascending: false });
+      .eq('role', 'member');
+      
+    if (!canViewAll) {
+       query = query.eq('referredById', req.user.id);
+    }
+
+    const { data: pendingUsers, error } = await query.order('createdAt', { ascending: false });
 
     if (error) throw error;
     // Add _id alias for backward compatibility
@@ -244,11 +262,20 @@ const getEmployees = async (req, res) => {
 // @access  Private (Owner/Employee)
 const getMembers = async (req, res) => {
   try {
-    const { data: members, error } = await supabase
+    const { data: settings } = await supabase.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
+    const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
+
+    let query = supabase
       .from('User')
-      .select('id, name, phone, status, imageUrl, nid, createdAt')
+      .select('id, name, fatherName, email, phone, status, imageUrl, nid, createdAt')
       .eq('role', 'member')
       .eq('status', 'approved');
+
+    if (!canViewAll) {
+       query = query.eq('referredById', req.user.id);
+    }
+
+    const { data: members, error } = await query;
 
     if (error) throw error;
     // Add _id alias
