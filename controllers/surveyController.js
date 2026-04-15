@@ -70,11 +70,11 @@ const createSurvey = async (req, res) => {
 
 // @desc    Get all surveys with filtering
 // @route   GET /api/surveys
-// @access  Private (Owner)
+// @access  Private (Owner/Employee)
 const getSurveys = async (req, res) => {
   try {
-    if (req.user.role !== 'owner') {
-      return res.status(403).json({ message: 'Only owners can access all surveys.' });
+    if (req.user.role !== 'owner' && req.user.role !== 'employee') {
+      return res.status(403).json({ message: 'Unauthorized access.' });
     }
 
     let query = supabase
@@ -82,8 +82,11 @@ const getSurveys = async (req, res) => {
       .select('*, submittedBy:User(name, phone)')
       .order('createdAt', { ascending: false });
 
-    // Filter by employee if provided
-    if (req.query.employeeId) {
+    if (req.user.role === 'employee') {
+      // Force filter to ONLY their own submitted surveys
+      query = query.eq('submittedById', req.user.id);
+    } else if (req.query.employeeId) {
+      // Filter by employee if provided and user is owner
       query = query.eq('submittedById', req.query.employeeId);
     }
 

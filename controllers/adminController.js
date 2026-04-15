@@ -267,7 +267,7 @@ const getMembers = async (req, res) => {
 
     let query = supabase
       .from('User')
-      .select('id, name, fatherName, email, phone, status, imageUrl, nid, createdAt')
+      .select('id, name, fatherName, email, phone, status, imageUrl, nid, createdAt, referredById')
       .eq('role', 'member')
       .eq('status', 'approved');
 
@@ -321,7 +321,7 @@ const updateUser = async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const updateData = {};
-    const fieldsToUpdate = ['name', 'phone', 'email', 'address', 'nid', 'fatherName', 'dob'];
+    const fieldsToUpdate = ['name', 'phone', 'email', 'address', 'nid', 'fatherName', 'dob', 'status'];
     fieldsToUpdate.forEach((field) => {
       if (req.body[field] !== undefined) {
         updateData[field] = field === 'dob' ? new Date(req.body[field]).toISOString() : req.body[field];
