@@ -62,6 +62,7 @@ const registerUser = async (req, res) => {
       .from('User')
       .insert([
         {
+          id: require('crypto').randomUUID(),
           name,
           fatherName,
           dob: new Date(dob).toISOString(),

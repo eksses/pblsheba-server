@@ -22,6 +22,7 @@ const createSurvey = async (req, res) => {
       .from('Survey')
       .insert([
         {
+          id: require('crypto').randomUUID(),
           name,
           fathersName: fathersName || 'N/A',
           wardNo,

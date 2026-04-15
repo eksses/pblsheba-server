@@ -5,14 +5,13 @@ class SystemLog {
   static async create({ level, message, metadata, userId, action, ip }) {
     try {
       const now = new Date().toISOString();
+      const parsedMetadata = metadata ? JSON.parse(JSON.stringify(metadata)) : {};
       const logData = {
         id: require('crypto').randomUUID(),
         level: level || 'info',
         message,
-        metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : null,
+        metadata: { ...parsedMetadata, action: action || null, ip: ip || null },
         userId: userId || null,
-        action: action || null,
-        ip: ip || null,
         createdAt: now
       };
 
