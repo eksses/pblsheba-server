@@ -9,7 +9,7 @@ const { cacheData, getCachedData, removeCachedData } = require('../utils/redis')
 const approveUser = async (req, res) => {
   try {
     const { status, paymentVerified } = req.body;
-    
+
     if (!['approved', 'rejected', 'pending'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
     }
@@ -39,8 +39,8 @@ const approveUser = async (req, res) => {
       userId: updatedUser.id,
       metadata: { adminId: req.user.id, status }
     });
-    
-    res.json(updatedUser);
+
+    res.json({ ...updatedUser, _id: updatedUser.id });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -54,11 +54,11 @@ const getMetrics = async (req, res) => {
     const { count: totalMembers } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'member');
     const { count: totalEmployees } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'employee');
     const { count: pendingApprovals } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
-    
+
     // Get settings for calculation
     const { data: settings } = await supabase.from('Setting').select('registrationFee').eq('id', 1).single();
     const fee = settings?.registrationFee || 365;
-    
+
     const { count: approvedMembers } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
     const totalCollected = (approvedMembers || 0) * fee;
 
@@ -84,9 +84,11 @@ const getPendingMembers = async (req, res) => {
       .eq('status', 'pending')
       .eq('role', 'member')
       .order('createdAt', { ascending: false });
-    
+
     if (error) throw error;
-    res.json(pendingUsers);
+    // Add _id alias for backward compatibility
+    const usersWithId = pendingUsers.map(u => ({ ...u, _id: u.id }));
+    res.json(usersWithId);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -97,22 +99,26 @@ const getPendingMembers = async (req, res) => {
 // @access  Private (Owner)
 const createEmployee = async (req, res) => {
   try {
-    const { name, phone, password, nid, email, fatherName, address } = req.body;
-    
-    if(req.user.role !== 'owner') {
+    const { name, phone, password, nid, email, fatherName, address, dob } = req.body;
+
+    if (req.user.role !== 'owner') {
       return res.status(403).json({ message: 'Only owners can create employees' });
     }
 
     const { data: exists } = await supabase.from('User').select('id').eq('phone', phone).single();
-    if(exists) return res.status(400).json({ message: 'Phone already in use' });
+    if (exists) return res.status(400).json({ message: 'Phone already in use' });
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Generate a unique ID for the employee
+    const employeeId = require('crypto').randomUUID();
 
     const { data: employee, error } = await supabase
       .from('User')
       .insert([
         {
+          id: employeeId,
           name,
           phone,
           password: hashedPassword,
@@ -123,7 +129,7 @@ const createEmployee = async (req, res) => {
           role: 'employee',
           status: 'approved',
           firstLogin: true,
-          dob: new Date('1990-01-01').toISOString(),
+          dob: dob ? new Date(dob).toISOString() : new Date('1990-01-01').toISOString(),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         }
@@ -131,7 +137,10 @@ const createEmployee = async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase insert error:', error);
+      throw error;
+    }
 
     await SystemLog.create({
       level: 'info',
@@ -141,8 +150,9 @@ const createEmployee = async (req, res) => {
       metadata: { adminId: req.user.id }
     });
 
-    res.status(201).json(employee);
+    res.status(201).json({ ...employee, _id: employee.id });
   } catch (error) {
+    console.error('Create Employee Error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -155,16 +165,20 @@ const createMember = async (req, res) => {
     const { name, fatherName, dob, nid, phone, paymentMethod, paymentNumber, password, trxId } = req.body;
 
     const { data: exists } = await supabase.from('User').select('id').eq('phone', phone).single();
-    if(exists) return res.status(400).json({ message: 'Phone already in use' });
+    if (exists) return res.status(400).json({ message: 'Phone already in use' });
 
     const imageUrl = req.file ? req.file.path : null;
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Generate unique ID for the member
+    const memberId = require('crypto').randomUUID();
+
     const { data: member, error } = await supabase
       .from('User')
       .insert([
         {
+          id: memberId,
           name,
           fatherName,
           dob: dob ? new Date(dob).toISOString() : new Date('1990-01-01').toISOString(),
@@ -186,7 +200,10 @@ const createMember = async (req, res) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Create member error:', error);
+      throw error;
+    }
 
     await SystemLog.create({
       level: 'info',
@@ -196,8 +213,9 @@ const createMember = async (req, res) => {
       metadata: { adminId: req.user.id }
     });
 
-    res.status(201).json(member);
+    res.status(201).json({ ...member, _id: member.id });
   } catch (error) {
+    console.error('Create Member Error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -207,14 +225,15 @@ const createMember = async (req, res) => {
 // @access  Private (Owner)
 const getEmployees = async (req, res) => {
   try {
-    if(req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
+    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
     const { data: employees, error } = await supabase
       .from('User')
       .select('id, name, phone, email, status, role, createdAt')
       .eq('role', 'employee');
-    
+
     if (error) throw error;
-    res.json(employees);
+    // Add _id alias
+    res.json(employees.map(e => ({ ...e, _id: e.id })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -230,9 +249,10 @@ const getMembers = async (req, res) => {
       .select('id, name, phone, status, imageUrl, nid, createdAt')
       .eq('role', 'member')
       .eq('status', 'approved');
-      
+
     if (error) throw error;
-    res.json(members);
+    // Add _id alias
+    res.json(members.map(m => ({ ...m, _id: m.id })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -243,8 +263,8 @@ const getMembers = async (req, res) => {
 // @access  Private (Owner)
 const deleteUser = async (req, res) => {
   try {
-    if(req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
-    
+    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
+
     // Check if user exists
     const { data: user } = await supabase.from('User').select('name, phone').eq('id', req.params.id).single();
     if (!user) return res.status(404).json({ message: 'User not found' });
@@ -303,7 +323,7 @@ const updateUser = async (req, res) => {
       metadata: { adminId: req.user.id }
     });
 
-    res.json(updatedUser);
+    res.json({ ...updatedUser, _id: updatedUser.id });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -320,7 +340,7 @@ const getSettings = async (req, res) => {
     if (!settings) {
       const { data } = await supabase.from('Setting').select('*').eq('id', 1).single();
       settings = data;
-      
+
       if (!settings) {
         // Create initial settings if none exist
         const { data: newSettings } = await supabase
@@ -344,7 +364,7 @@ const getSettings = async (req, res) => {
       }
       await cacheData(cacheKey, settings, 3600);
     }
-    res.json(settings);
+    res.json({ ...settings, _id: settings.id });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -355,21 +375,25 @@ const getSettings = async (req, res) => {
 // @access  Private (Owner)
 const updateSettings = async (req, res) => {
   try {
-    if(req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
-    
+    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
+
     const updateData = {};
-    if (req.body.registrationFee !== undefined) updateData.registrationFee = req.body.registrationFee;
-    if (req.body.paymentMethods) updateData.paymentMethods = req.body.paymentMethods;
-    if (req.body.employeeCanViewAll !== undefined) updateData.employeeCanViewAll = req.body.employeeCanViewAll;
-    
+    if (req.body.registrationFee !== undefined) updateData.registrationFee = parseInt(req.body.registrationFee);
+    if (req.body.paymentMethods) updateData.paymentMethods = JSON.parse(JSON.stringify(req.body.paymentMethods));
+    if (req.body.employeeCanViewAll !== undefined) updateData.employeeCanViewAll = Boolean(req.body.employeeCanViewAll);
+    updateData.updatedAt = new Date().toISOString();
+
     const { data: updated, error } = await supabase
       .from('Setting')
-      .update({ ...updateData, updatedAt: new Date().toISOString() })
+      .update(updateData)
       .eq('id', 1)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Settings update error:', error);
+      throw error;
+    }
 
     // Invalidate caches
     await removeCachedData('system_settings');
@@ -382,8 +406,9 @@ const updateSettings = async (req, res) => {
       metadata: { adminId: req.user.id, updates: updateData }
     });
 
-    res.json(updated);
+    res.json({ ...updated, _id: updated.id });
   } catch (error) {
+    console.error('Update Settings Error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -401,19 +426,20 @@ const getLeaderboard = async (req, res) => {
       if (error) throw error;
 
       leaderboard = await Promise.all(employees.map(async (emp) => {
-         const { count } = await supabase
-           .from('User')
-           .select('*', { count: 'exact', head: true })
-           .eq('referredById', emp.id)
-           .eq('status', 'approved')
-           .eq('role', 'member');
-         
-         return {
-           id: emp.id,
-           name: emp.name,
-           phone: emp.phone,
-           memberCount: count || 0
-         };
+        const { count } = await supabase
+          .from('User')
+          .select('*', { count: 'exact', head: true })
+          .eq('referredById', emp.id)
+          .eq('status', 'approved')
+          .eq('role', 'member');
+
+        return {
+          id: emp.id,
+          _id: emp.id,
+          name: emp.name,
+          phone: emp.phone,
+          memberCount: count || 0
+        };
       }));
 
       leaderboard.sort((a, b) => b.memberCount - a.memberCount);
@@ -435,9 +461,10 @@ const getEditRequests = async (req, res) => {
       .from('User')
       .select('id, name, phone, editRequestedChanges, updatedAt')
       .eq('editRequestPending', true);
-      
+
     if (error) throw error;
-    res.json(requests);
+    // Add _id alias
+    res.json(requests.map(r => ({ ...r, _id: r.id })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -467,8 +494,8 @@ const dismissEditRequest = async (req, res) => {
       userId: updatedUser.id,
       metadata: { adminId: req.user.id }
     });
-    
-    res.json({ message: 'Edit request dismissed', user: updatedUser });
+
+    res.json({ message: 'Edit request dismissed', user: { ...updatedUser, _id: updatedUser.id } });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -1,17 +1,59 @@
-const mongoose = require('mongoose');
+const supabase = require('../utils/supabase');
 
-const systemLogSchema = new mongoose.Schema({
-  level: { type: String, enum: ['info', 'warn', 'error'], default: 'info' },
-  message: { type: String, required: true },
-  metadata: { type: Object },
-  userId: { type: String }, // Store the Prisma/Postgres User ID
-  ip: { type: String },
-  action: { type: String },
-  timestamp: { type: Date, default: Date.now }
-}, {
-  timestamps: true
-});
+// PostgreSQL-based SystemLog model
+class SystemLog {
+  static async create({ level, message, metadata, userId, action, ip }) {
+    try {
+      const now = new Date().toISOString();
+      const logData = {
+        id: require('crypto').randomUUID(),
+        level: level || 'info',
+        message,
+        metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : null,
+        userId: userId || null,
+        action: action || null,
+        ip: ip || null,
+        createdAt: now
+      };
 
-const SystemLog = mongoose.model('SystemLog', systemLogSchema);
+      const { data, error } = await supabase
+        .from('SystemLog')
+        .insert([logData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('SystemLog create error:', error);
+        throw error;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('SystemLog creation failed:', error);
+      throw error;
+    }
+  }
+
+  static async find(query = {}, options = {}) {
+    try {
+      let q = supabase.from('SystemLog').select('*');
+
+      if (query.level) q = q.eq('level', query.level);
+      if (query.userId) q = q.eq('userId', query.userId);
+      if (query.action) q = q.eq('action', query.action);
+
+      const limit = options.limit || 100;
+      const order = options.order === 'asc' ? true : false;
+
+      const { data, error } = await q.limit(limit).order('createdAt', { ascending: order });
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('SystemLog find error:', error);
+      return [];
+    }
+  }
+}
 
 module.exports = SystemLog;

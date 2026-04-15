@@ -72,6 +72,8 @@ model SystemLog {
   message   String
   metadata  Json?
   userId    String?
+  action    String?
+  ip        String?
   createdAt DateTime @default(now())
 }
 

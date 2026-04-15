@@ -6,10 +6,10 @@ const SystemLog = require('../models/SystemLog');
 // @access  Private (Owner/Employee/Member)
 const createSurvey = async (req, res) => {
   try {
-    const { 
-      name, fathersName, wardNo, farmAnimals, farmableLand, 
-      houseType, familyMembers, gender, childrenBoy, 
-      childrenGirl, monthlyIncome, phone 
+    const {
+      name, fathersName, wardNo, farmAnimals, farmableLand,
+      houseType, familyMembers, gender, childrenBoy,
+      childrenGirl, monthlyIncome, phone
     } = req.body;
 
     if (!name || !phone || !wardNo) {
@@ -60,7 +60,7 @@ const createSurvey = async (req, res) => {
       });
     }
 
-    res.status(201).json(survey);
+    res.status(201).json({ ...survey, _id: survey.id });
   } catch (error) {
     console.error('Survey create error:', error);
     res.status(500).json({ message: error.message });
@@ -89,7 +89,8 @@ const getSurveys = async (req, res) => {
     const { data: surveys, error } = await query;
 
     if (error) throw error;
-    res.json(surveys);
+    // Add _id alias
+    res.json(surveys.map(s => ({ ...s, _id: s.id })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -117,7 +118,7 @@ const getSurveyStats = async (req, res) => {
         .from('Survey')
         .select('*', { count: 'exact', head: true })
         .eq('submittedById', emp.id);
-      
+
       return {
         id: emp.id,
         name: emp.name,

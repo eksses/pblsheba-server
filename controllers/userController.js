@@ -37,11 +37,13 @@ const searchUsers = async (req, res) => {
     if (error) throw error;
 
     const sanitizedUsers = users.map(u => {
+      const userWithId = { ...u, _id: u.id };
       if (req.user.role === 'owner' || (req.user.role === 'employee' && employeeCanViewAll)) {
-        return u;
+        return userWithId;
       }
       return {
         id: u.id,
+        _id: u.id,
         name: u.name,
         fatherName: u.fatherName,
         imageUrl: u.imageUrl,
@@ -63,7 +65,7 @@ const searchUsers = async (req, res) => {
 const requestEdit = async (req, res) => {
   try {
     const { requestedChanges } = req.body;
-    
+
     const { data: updatedUser, error } = await supabase
       .from('User')
       .update({
@@ -99,7 +101,7 @@ const requestEdit = async (req, res) => {
 const changePassword = async (req, res) => {
   try {
     const { newPassword } = req.body;
-    
+
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
@@ -122,7 +124,7 @@ const changePassword = async (req, res) => {
       action: 'USER_CHANGE_PASSWORD',
       userId: updatedUser.id
     });
-    
+
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -136,7 +138,7 @@ const publicSearch = async (req, res) => {
   try {
     const { name, fatherName, nid } = req.query;
 
-    let query = supabase.from('User').select('name, status, imageUrl').eq('role', 'member');
+    let query = supabase.from('User').select('id, name, status, imageUrl').eq('role', 'member');
 
     if (name?.trim()) query = query.ilike('name', `%${name.trim()}%`);
     if (fatherName?.trim()) query = query.ilike('fatherName', `%${fatherName.trim()}%`);
@@ -145,7 +147,8 @@ const publicSearch = async (req, res) => {
     const { data: users, error } = await query;
     if (error) throw error;
 
-    res.json(users);
+    // Add _id alias
+    res.json(users.map(u => ({ ...u, _id: u.id })));
 
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -162,16 +165,16 @@ const getPublicSettings = async (req, res) => {
 
     if (!publicSettings) {
       const { data: settings } = await supabase.from('Setting').select('*').eq('id', 1).single();
-      
+
       const activePayments = Array.isArray(settings?.paymentMethods) ? settings.paymentMethods.filter(p => p.isActive) : [];
       publicSettings = {
         registrationFee: settings?.registrationFee || 365,
         paymentMethods: activePayments
       };
-      
+
       await cacheData(cacheKey, publicSettings, 3600);
     }
-    
+
     res.json(publicSettings);
   } catch (error) {
     res.status(500).json({ message: error.message });
