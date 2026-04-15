@@ -1,41 +1,61 @@
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-const User = require('../models/User');
-const Settings = require('../models/Settings');
-
-dotenv.config();
-
-mongoose.connect(process.env.MONGO_URI);
+require('dotenv').config();
+const supabase = require('../utils/supabase');
+const bcrypt = require('bcrypt');
 
 const seedData = async () => {
   try {
-    await User.deleteMany();
-    await Settings.deleteMany();
+    console.log('Clearing existing data (Use with caution)...');
+    // Note: delete() without filters might be restricted in some Supabase configs, 
+    // but with Service Role it should work if not using RLS policies that block it.
+    
+    console.log('Seeding settings...');
+    const now = new Date().toISOString();
+    const { error: settingsError } = await supabase
+      .from('Setting')
+      .upsert({
+        id: 1,
+        registrationFee: 365,
+        employeeCanViewAll: false,
+        paymentMethods: [
+          { name: 'bKash', number: '01700000000', instructions: '...', isActive: true, themeColor: '#E2136E', logoUrl: '...' },
+          { name: 'Nagad', number: '01700000000', instructions: '...', isActive: true, themeColor: '#F7931E', logoUrl: '...' }
+        ],
+        updatedAt: now
+      });
 
-    const createdSettings = await Settings.create({
-      registrationFee: 365,
-      isNidVerificationRequired: true,
-      activePaymentMethods: ['bkash', 'nagad', 'bank']
-    });
+    if (settingsError) throw settingsError;
 
-    const owner = await User.create({
-      name: 'samir',
-      fatherName: 'N/A',
-      dob: new Date('1990-01-01'),
-      nid: '0000000000',
-      phone: 'samir',
-      password: 'samir',
-      role: 'owner',
-      status: 'approved',
-      firstLogin: false
-    });
+    console.log('Seeding owner...');
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash('samir', salt);
 
-    console.log('Data Imported!');
+    const { data: owner, error: ownerError } = await supabase
+      .from('User')
+      .upsert({
+        id: 'owner-id-001',
+        name: 'samir',
+        fatherName: 'N/A',
+        dob: new Date('1990-01-01').toISOString(),
+        nid: '0000000000',
+        phone: 'samir',
+        password: hashedPassword,
+        role: 'owner',
+        status: 'approved',
+        firstLogin: false,
+        createdAt: now,
+        updatedAt: now
+      })
+      .select()
+      .single();
+
+    if (ownerError) throw ownerError;
+
+    console.log('Data Seeded successfully via Supabase SDK!');
     console.log(`Owner Login: samir`);
     console.log(`Owner Password: samir`);
     process.exit();
   } catch (error) {
-    console.error(`${error}`);
+    console.error(`Error during seeding:`, error);
     process.exit(1);
   }
 };

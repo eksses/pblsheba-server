@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const supabase = require('../utils/supabase');
 
 const protect = async (req, res, next) => {
   let token;
@@ -7,15 +7,28 @@ const protect = async (req, res, next) => {
     try {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
+      
+      const { data: user, error } = await supabase
+        .from('User')
+        .select('id, name, phone, role, status')
+        .eq('id', decoded.id)
+        .single();
+
+      if (error || !user) {
+        console.warn(`Auth Failed: User with ID ${decoded.id} not found in Supabase.`);
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      req.user = user;
       next();
     } catch (error) {
-      console.error(error);
+      console.error('JWT Verification Error:', error.message);
       res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }
 
   if (!token) {
+    console.warn('Auth Failed: No token provided in headers.');
     res.status(401).json({ message: 'Not authorized, no token' });
   }
 };

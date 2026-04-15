@@ -1,4 +1,7 @@
-const User = require('../models/User');
+const supabase = require('../utils/supabase');
+const bcrypt = require('bcrypt');
+const SystemLog = require('../models/SystemLog');
+const { cacheData, getCachedData, removeCachedData } = require('../utils/redis');
 
 // @desc    Approve/Reject a pending member
 // @route   PATCH /api/admin/approve/:id
@@ -13,17 +16,31 @@ const approveUser = async (req, res) => {
 
     const updateData = { status };
     if (paymentVerified !== undefined) {
-      updateData['payment.verified'] = paymentVerified;
-      updateData['payment.verifiedBy'] = req.user.role === 'owner' ? 'admin' : 'system';
+      updateData.paymentVerified = paymentVerified;
+      updateData.verifiedBy = req.user.role === 'owner' ? 'admin' : 'system';
     }
 
-    const updatedUser = await User.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true });
+    const { data: updatedUser, error } = await supabase
+      .from('User')
+      .update({ ...updateData, updatedAt: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select()
+      .single();
 
-    if (updatedUser) {
-      res.json(updatedUser);
-    } else {
-      res.status(404).json({ message: 'User not found' });
+    if (error || !updatedUser) {
+      return res.status(404).json({ message: 'User not found or update failed' });
     }
+
+    // Log Approval/Rejection
+    await SystemLog.create({
+      level: 'info',
+      message: `Admin ${req.user.name} changed status for ${updatedUser.name} to ${status}`,
+      action: 'USER_STATUS_UPDATE',
+      userId: updatedUser.id,
+      metadata: { adminId: req.user.id, status }
+    });
+    
+    res.json(updatedUser);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -34,18 +51,21 @@ const approveUser = async (req, res) => {
 // @access  Private (Owner/Employee)
 const getMetrics = async (req, res) => {
   try {
-    const totalMembers = await User.countDocuments({ role: 'member' });
-    const totalEmployees = await User.countDocuments({ role: 'employee' });
-    const pendingApprovals = await User.countDocuments({ status: 'pending' });
+    const { count: totalMembers } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'member');
+    const { count: totalEmployees } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'employee');
+    const { count: pendingApprovals } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
     
-    // Simulate collected money based on approved members x 365 (assuming full fee payment)
-    const approvedMembers = await User.countDocuments({ status: 'approved', role: 'member' });
-    const totalCollected = approvedMembers * 365;
+    // Get settings for calculation
+    const { data: settings } = await supabase.from('Setting').select('registrationFee').eq('id', 1).single();
+    const fee = settings?.registrationFee || 365;
+    
+    const { count: approvedMembers } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
+    const totalCollected = (approvedMembers || 0) * fee;
 
     res.json({
-      totalMembers,
-      totalEmployees,
-      pendingApprovals,
+      totalMembers: totalMembers || 0,
+      totalEmployees: totalEmployees || 0,
+      pendingApprovals: pendingApprovals || 0,
       totalCollected
     });
   } catch (error) {
@@ -58,7 +78,14 @@ const getMetrics = async (req, res) => {
 // @access  Private (Owner/Employee)
 const getPendingMembers = async (req, res) => {
   try {
-    const pendingUsers = await User.find({ status: 'pending', role: 'member' });
+    const { data: pendingUsers, error } = await supabase
+      .from('User')
+      .select('*')
+      .eq('status', 'pending')
+      .eq('role', 'member')
+      .order('createdAt', { ascending: false });
+    
+    if (error) throw error;
     res.json(pendingUsers);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -76,21 +103,42 @@ const createEmployee = async (req, res) => {
       return res.status(403).json({ message: 'Only owners can create employees' });
     }
 
-    const exists = await User.findOne({ phone });
+    const { data: exists } = await supabase.from('User').select('id').eq('phone', phone).single();
     if(exists) return res.status(400).json({ message: 'Phone already in use' });
 
-    const employee = await User.create({
-      name,
-      phone,
-      password,
-      nid,
-      email,
-      fatherName: fatherName || 'N/A',
-      address,
-      role: 'employee',
-      status: 'approved',
-      firstLogin: true,
-      dob: new Date('1990-01-01'), // dummy date
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const { data: employee, error } = await supabase
+      .from('User')
+      .insert([
+        {
+          name,
+          phone,
+          password: hashedPassword,
+          nid,
+          email,
+          fatherName: fatherName || 'N/A',
+          address,
+          role: 'employee',
+          status: 'approved',
+          firstLogin: true,
+          dob: new Date('1990-01-01').toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await SystemLog.create({
+      level: 'info',
+      message: `Employee created: ${employee.name}`,
+      action: 'ADMIN_CREATE_EMPLOYEE',
+      userId: employee.id,
+      metadata: { adminId: req.user.id }
     });
 
     res.status(201).json(employee);
@@ -106,29 +154,46 @@ const createMember = async (req, res) => {
   try {
     const { name, fatherName, dob, nid, phone, paymentMethod, paymentNumber, password, trxId } = req.body;
 
-    const exists = await User.findOne({ phone });
+    const { data: exists } = await supabase.from('User').select('id').eq('phone', phone).single();
     if(exists) return res.status(400).json({ message: 'Phone already in use' });
 
     const imageUrl = req.file ? req.file.path : null;
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    const member = await User.create({
-      name,
-      fatherName,
-      dob: dob || new Date('1990-01-01'),
-      nid,
-      phone,
-      password,
-      imageUrl,
-      role: 'member',
-      status: 'approved', // Manual creation means it's pre-approved
-      referredBy: req.user._id,
-      payment: {
-        method: paymentMethod || 'bKash',
-        number: paymentNumber,
-        transactionId: trxId,
-        verified: true, // Manual creation skips pending verification
-        verifiedBy: req.user.role === 'owner' ? 'admin' : 'system'
-      }
+    const { data: member, error } = await supabase
+      .from('User')
+      .insert([
+        {
+          name,
+          fatherName,
+          dob: dob ? new Date(dob).toISOString() : new Date('1990-01-01').toISOString(),
+          nid,
+          phone,
+          password: hashedPassword,
+          imageUrl,
+          role: 'member',
+          status: 'approved',
+          referredById: req.user.id,
+          paymentMethod: paymentMethod || 'bKash',
+          paymentTrxId: trxId,
+          paymentVerified: true,
+          verifiedBy: req.user.role === 'owner' ? 'admin' : 'system',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await SystemLog.create({
+      level: 'info',
+      message: `Member manually created: ${member.name}`,
+      action: 'ADMIN_CREATE_MEMBER',
+      userId: member.id,
+      metadata: { adminId: req.user.id }
     });
 
     res.status(201).json(member);
@@ -143,7 +208,12 @@ const createMember = async (req, res) => {
 const getEmployees = async (req, res) => {
   try {
     if(req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
-    const employees = await User.find({ role: 'employee' }).select('-password');
+    const { data: employees, error } = await supabase
+      .from('User')
+      .select('id, name, phone, email, status, role, createdAt')
+      .eq('role', 'employee');
+    
+    if (error) throw error;
     res.json(employees);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -155,7 +225,13 @@ const getEmployees = async (req, res) => {
 // @access  Private (Owner/Employee)
 const getMembers = async (req, res) => {
   try {
-    const members = await User.find({ role: 'member', status: 'approved' }).select('-password');
+    const { data: members, error } = await supabase
+      .from('User')
+      .select('id, name, phone, status, imageUrl, nid, createdAt')
+      .eq('role', 'member')
+      .eq('status', 'approved');
+      
+    if (error) throw error;
     res.json(members);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -168,8 +244,21 @@ const getMembers = async (req, res) => {
 const deleteUser = async (req, res) => {
   try {
     if(req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
-    const user = await User.findByIdAndDelete(req.params.id);
+    
+    // Check if user exists
+    const { data: user } = await supabase.from('User').select('name, phone').eq('id', req.params.id).single();
     if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const { error } = await supabase.from('User').delete().eq('id', req.params.id);
+    if (error) throw error;
+
+    await SystemLog.create({
+      level: 'warn',
+      message: `User deleted by admin: ${user.name} (${user.phone})`,
+      action: 'ADMIN_DELETE_USER',
+      metadata: { adminId: req.user.id, deletedUserId: req.params.id }
+    });
+
     res.json({ message: 'User removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -181,38 +270,79 @@ const deleteUser = async (req, res) => {
 // @access  Private (Owner/Employee)
 const updateUser = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const { data: user } = await supabase.from('User').select('name').eq('id', req.params.id).single();
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Allow updating these fields
+    const updateData = {};
     const fieldsToUpdate = ['name', 'phone', 'email', 'address', 'nid', 'fatherName', 'dob'];
     fieldsToUpdate.forEach((field) => {
       if (req.body[field] !== undefined) {
-        user[field] = req.body[field];
+        updateData[field] = field === 'dob' ? new Date(req.body[field]).toISOString() : req.body[field];
       }
     });
 
     if (req.body.password) {
-      user.password = req.body.password;
+      const salt = await bcrypt.genSalt(10);
+      updateData.password = await bcrypt.hash(req.body.password, salt);
     }
 
-    const updatedUser = await user.save();
+    const { data: updatedUser, error } = await supabase
+      .from('User')
+      .update({ ...updateData, updatedAt: new Date().toISOString() })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await SystemLog.create({
+      level: 'info',
+      message: `User info updated by admin: ${updatedUser.name}`,
+      action: 'ADMIN_UPDATE_USER',
+      userId: updatedUser.id,
+      metadata: { adminId: req.user.id }
+    });
+
     res.json(updatedUser);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-const Settings = require('../models/Settings');
-
 // @desc    Get system settings
 // @route   GET /api/admin/settings
 // @access  Private (Owner/Employee)
 const getSettings = async (req, res) => {
   try {
-    let settings = await Settings.findOne();
+    const cacheKey = 'system_settings';
+    let settings = await getCachedData(cacheKey);
+
     if (!settings) {
-      settings = await Settings.create({});
+      const { data } = await supabase.from('Setting').select('*').eq('id', 1).single();
+      settings = data;
+      
+      if (!settings) {
+        // Create initial settings if none exist
+        const { data: newSettings } = await supabase
+          .from('Setting')
+          .insert([
+            {
+              id: 1,
+              registrationFee: 365,
+              paymentMethods: [
+                { name: 'bKash', number: '01700000000', instructions: '...', isActive: true, themeColor: '#E2136E', logoUrl: '...' },
+                { name: 'Nagad', number: '01700000000', instructions: '...', isActive: true, themeColor: '#F7931E', logoUrl: '...' }
+              ],
+              employeeCanViewAll: false,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }
+          ])
+          .select()
+          .single();
+        settings = newSettings;
+      }
+      await cacheData(cacheKey, settings, 3600);
     }
     res.json(settings);
   } catch (error) {
@@ -227,16 +357,31 @@ const updateSettings = async (req, res) => {
   try {
     if(req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
     
-    let settings = await Settings.findOne();
-    if (!settings) {
-      settings = new Settings();
-    }
+    const updateData = {};
+    if (req.body.registrationFee !== undefined) updateData.registrationFee = req.body.registrationFee;
+    if (req.body.paymentMethods) updateData.paymentMethods = req.body.paymentMethods;
+    if (req.body.employeeCanViewAll !== undefined) updateData.employeeCanViewAll = req.body.employeeCanViewAll;
     
-    settings.registrationFee = req.body.registrationFee !== undefined ? req.body.registrationFee : settings.registrationFee;
-    settings.paymentMethods = req.body.paymentMethods || settings.paymentMethods;
-    settings.employeeCanViewAll = req.body.employeeCanViewAll !== undefined ? req.body.employeeCanViewAll : settings.employeeCanViewAll;
-    
-    const updated = await settings.save();
+    const { data: updated, error } = await supabase
+      .from('Setting')
+      .update({ ...updateData, updatedAt: new Date().toISOString() })
+      .eq('id', 1)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Invalidate caches
+    await removeCachedData('system_settings');
+    await removeCachedData('public_settings');
+
+    await SystemLog.create({
+      level: 'info',
+      message: `System settings updated by admin`,
+      action: 'ADMIN_UPDATE_SETTINGS',
+      metadata: { adminId: req.user.id, updates: updateData }
+    });
+
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -248,21 +393,33 @@ const updateSettings = async (req, res) => {
 // @access  Private (Owner/Employee)
 const getLeaderboard = async (req, res) => {
   try {
-    const leaderboard = await User.aggregate([
-      { $match: { role: 'member', status: 'approved', referredBy: { $ne: null } } },
-      { $group: { _id: '$referredBy', memberCount: { $sum: 1 } } },
-      {
-        $lookup: {
-          from: 'users',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'employee'
-        }
-      },
-      { $unwind: '$employee' },
-      { $sort: { memberCount: -1 } },
-      { $project: { _id: 1, name: '$employee.name', phone: '$employee.phone', memberCount: 1 } }
-    ]);
+    const cacheKey = 'leaderboard_data';
+    let leaderboard = await getCachedData(cacheKey);
+
+    if (!leaderboard) {
+      const { data: employees, error } = await supabase.from('User').select('id, name, phone').eq('role', 'employee');
+      if (error) throw error;
+
+      leaderboard = await Promise.all(employees.map(async (emp) => {
+         const { count } = await supabase
+           .from('User')
+           .select('*', { count: 'exact', head: true })
+           .eq('referredById', emp.id)
+           .eq('status', 'approved')
+           .eq('role', 'member');
+         
+         return {
+           id: emp.id,
+           name: emp.name,
+           phone: emp.phone,
+           memberCount: count || 0
+         };
+      }));
+
+      leaderboard.sort((a, b) => b.memberCount - a.memberCount);
+      await cacheData(cacheKey, leaderboard, 600); // 10 mins cache
+    }
+
     res.json(leaderboard);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -274,7 +431,12 @@ const getLeaderboard = async (req, res) => {
 // @access  Private (Owner/Employee)
 const getEditRequests = async (req, res) => {
   try {
-    const requests = await User.find({ 'editRequest.pending': true }).select('-password');
+    const { data: requests, error } = await supabase
+      .from('User')
+      .select('id, name, phone, editRequestedChanges, updatedAt')
+      .eq('editRequestPending', true);
+      
+    if (error) throw error;
     res.json(requests);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -286,16 +448,27 @@ const getEditRequests = async (req, res) => {
 // @access  Private (Owner/Employee)
 const dismissEditRequest = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const { data: updatedUser, error } = await supabase
+      .from('User')
+      .update({
+        editRequestPending: false,
+        editApproved: true
+      })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await SystemLog.create({
+      level: 'info',
+      message: `Admin dismissed edit request for ${updatedUser.name}`,
+      action: 'ADMIN_DISMISS_EDIT',
+      userId: updatedUser.id,
+      metadata: { adminId: req.user.id }
+    });
     
-    if (user.editRequest) {
-      user.editRequest.pending = false;
-      user.editRequest.approved = true;
-    }
-    
-    await user.save();
-    res.json({ message: 'Edit request dismissed', user: user });
+    res.json({ message: 'Edit request dismissed', user: updatedUser });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                   String     @id @default(cuid())
+  name                 String
+  fatherName           String
+  dob                  DateTime
+  nid                  String?    @unique
+  phone                String     @unique
+  email                String?
+  address              String?
+  paymentNumber        String?
+  imageUrl             String?
+  password             String
+  role                 Role       @default(member)
+  status               Status     @default(pending)
+  referredById         String?
+  paymentMethod        String?
+  paymentTrxId         String?
+  paymentVerified      Boolean    @default(false)
+  verifiedBy           VerifiedBy @default(none)
+  nidVerified          Boolean    @default(false)
+  editRequestPending   Boolean    @default(false)
+  editRequestedChanges Json?
+  editApproved         Boolean    @default(false)
+  firstLogin           Boolean    @default(true)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  surveys              Survey[]
+  referredBy           User?      @relation("Referral", fields: [referredById], references: [id])
+  referrals            User[]     @relation("Referral")
+}
+
+model Survey {
+  id            String   @id @default(cuid())
+  name          String
+  fathersName   String
+  wardNo        String
+  farmAnimals   String?
+  farmableLand  String?
+  houseType     String?
+  familyMembers Int?
+  gender        String?
+  childrenBoy   Int?
+  childrenGirl  Int?
+  monthlyIncome Float?
+  phone         String   @unique
+  submittedById String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  submittedBy   User     @relation(fields: [submittedById], references: [id])
+}
+
+model Setting {
+  id                 Int      @id @default(1)
+  registrationFee    Int      @default(365)
+  employeeCanViewAll Boolean  @default(false)
+  paymentMethods     Json
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String
+  message   String
+  metadata  Json?
+  userId    String?
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  member
+  employee
+  owner
+}
+
+enum Status {
+  pending
+  approved
+  rejected
+}
+
+enum VerifiedBy {
+  admin
+  system
+  none
+}

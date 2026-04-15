@@ -1,6 +1,28 @@
-const User = require('../models/User');
+const supabase = require('../utils/supabase');
+const bcrypt = require('bcrypt');
 const generateToken = require('../utils/generateToken');
-const Settings = require('../models/Settings');
+const { getCachedData, cacheData } = require('../utils/redis');
+const SystemLog = require('../models/SystemLog');
+
+// Helper to get settings with caching
+const getSettings = async () => {
+  const cacheKey = 'system_settings';
+  let settings = await getCachedData(cacheKey);
+  
+  if (!settings) {
+    const { data } = await supabase
+      .from('Setting')
+      .select('*')
+      .eq('id', 1)
+      .single();
+    
+    settings = data;
+    if (settings) {
+      await cacheData(cacheKey, settings, 3600); // Cache for 1 hour
+    }
+  }
+  return settings;
+};
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
@@ -9,40 +31,70 @@ const registerUser = async (req, res) => {
   try {
     const { name, fatherName, dob, nid, phone, paymentNumber, password, paymentMethod, trxId } = req.body;
 
-    const userExists = await User.findOne({ phone });
+    // Check if user exists
+    const { data: userExists } = await supabase
+      .from('User')
+      .select('id')
+      .eq('phone', phone)
+      .single();
+
     if (userExists) {
       return res.status(400).json({ message: 'User with this phone already exists' });
     }
 
-    const settings = await Settings.findOne();
-    if (settings && settings.isNidVerificationRequired) {
-      const nidExists = await User.findOne({ nid });
+    if (nid) {
+      const { data: nidExists } = await supabase
+        .from('User')
+        .select('id')
+        .eq('nid', nid)
+        .single();
+        
       if (nidExists) {
-         return res.status(400).json({ message: 'User with this NID already exists' });
+        return res.status(400).json({ message: 'User with this NID already exists' });
       }
     }
 
     const imageUrl = req.file ? req.file.path : null;
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = await User.create({
-      name,
-      fatherName,
-      dob,
-      nid,
-      phone,
-      paymentNumber,
-      password,
-      imageUrl,
-      payment: {
-         method: paymentMethod || 'bKash',
-         number: paymentNumber,
-         transactionId: trxId
-      }
-    });
+    const { data: user, error } = await supabase
+      .from('User')
+      .insert([
+        {
+          name,
+          fatherName,
+          dob: new Date(dob).toISOString(),
+          nid: nid || null,
+          phone,
+          paymentNumber,
+          password: hashedPassword,
+          imageUrl,
+          paymentMethod: paymentMethod || 'bKash',
+          paymentTrxId: trxId,
+          role: 'member',
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
 
     if (user) {
+      // Log Registration
+      await SystemLog.create({
+        level: 'info',
+        message: `New user registration: ${user.name} (${user.phone})`,
+        action: 'USER_REGISTER',
+        userId: user.id,
+        ip: req.ip
+      });
+
       res.status(201).json({
-        _id: user._id,
+        _id: user.id,
         name: user.name,
         phone: user.phone,
         status: user.status,
@@ -52,7 +104,8 @@ const registerUser = async (req, res) => {
       res.status(400).json({ message: 'Invalid user data' });
     }
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Registration Error:', error);
+    res.status(500).json({ message: 'Server error during registration' });
   }
 };
 
@@ -63,32 +116,51 @@ const authUser = async (req, res) => {
   try {
     const { phone, password } = req.body;
 
-    const user = await User.findOne({ phone });
+    const { data: user, error } = await supabase
+      .from('User')
+      .select('*')
+      .eq('phone', phone)
+      .single();
 
-    if (user && (await user.matchPassword(password))) {
-      // Check if user is approved
-      if (user.status !== 'approved' && user.role !== 'owner') {
-        return res.status(401).json({ message: `Your account is currently ${user.status}. You cannot log in.` });
-      }
-
-      res.json({
-        _id: user._id,
-        name: user.name,
-        phone: user.phone,
-        role: user.role,
-        firstLogin: user.firstLogin,
-        imageUrl: user.imageUrl,
-        status: user.status,
-        nid: user.nid,
-        fatherName: user.fatherName,
-        dob: user.dob,
-        token: generateToken(user._id),
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid phone or password' });
+    if (error || !user) {
+      return res.status(401).json({ message: 'Invalid phone or password' });
     }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid phone or password' });
+    }
+
+    // Check if user is approved
+    if (user.status !== 'approved' && user.role !== 'owner') {
+      return res.status(401).json({ message: `Your account is currently ${user.status}. You cannot log in.` });
+    }
+
+    // Log Login
+    await SystemLog.create({
+      level: 'info',
+      message: `User logged in: ${user.name}`,
+      action: 'USER_LOGIN',
+      userId: user.id,
+      ip: req.ip
+    });
+
+    res.json({
+      _id: user.id,
+      name: user.name,
+      phone: user.phone,
+      role: user.role,
+      firstLogin: user.firstLogin,
+      imageUrl: user.imageUrl,
+      status: user.status,
+      nid: user.nid,
+      fatherName: user.fatherName,
+      dob: user.dob,
+      token: generateToken(user.id),
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Login Error:', error);
+    res.status(500).json({ message: 'Server error during login' });
   }
 };
 
