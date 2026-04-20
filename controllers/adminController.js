@@ -142,6 +142,7 @@ const createEmployee = async (req, res) => {
           password: hashedPassword,
           nid,
           email,
+          imageUrl: req.file ? req.file.path : null,
           fatherName: fatherName || 'N/A',
           address,
           role: 'employee',
@@ -327,6 +328,12 @@ const updateUser = async (req, res) => {
         updateData[field] = field === 'dob' ? new Date(req.body[field]).toISOString() : req.body[field];
       }
     });
+
+    // Only allow updating imageUrl for staff/employees
+    const { data: targetUser } = await supabase.from('User').select('role').eq('id', req.params.id).single();
+    if (targetUser?.role === 'employee' && req.file) {
+      updateData.imageUrl = req.file.path;
+    }
 
     if (req.body.password) {
       const salt = await bcrypt.genSalt(10);
