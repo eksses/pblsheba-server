@@ -5,8 +5,8 @@ const bcrypt = require('bcrypt');
 const seedData = async () => {
   try {
     console.log('Clearing existing data (Use with caution)...');
-    // Note: delete() without filters might be restricted in some Supabase configs, 
-    // but with Service Role it should work if not using RLS policies that block it.
+    
+    
     
     console.log('Seeding settings...');
     const now = new Date().toISOString();

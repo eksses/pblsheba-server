@@ -10,7 +10,7 @@ redis.on('error', (err) => {
   console.error('Redis Connection Error:', err);
 });
 
-// Helper for caching with auto-expiration to stay within 30MB limit
+
 const cacheData = async (key, value, expiry = 3600) => {
   try {
     const stringValue = JSON.stringify(value);

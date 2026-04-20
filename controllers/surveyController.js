@@ -1,9 +1,9 @@
 const supabase = require('../utils/supabase');
 const SystemLog = require('../models/SystemLog');
 
-// @desc    Submit a new survey
-// @route   POST /api/surveys
-// @access  Private (Owner/Employee/Member)
+
+
+
 const createSurvey = async (req, res) => {
   try {
     const {
@@ -50,7 +50,7 @@ const createSurvey = async (req, res) => {
       throw error;
     }
 
-    // Log the submission if it's an employee or owner
+    
     if (req.user.role !== 'member') {
       await SystemLog.create({
         level: 'info',
@@ -68,9 +68,9 @@ const createSurvey = async (req, res) => {
   }
 };
 
-// @desc    Get all surveys with filtering
-// @route   GET /api/surveys
-// @access  Private (Owner/Employee)
+
+
+
 const getSurveys = async (req, res) => {
   try {
     if (req.user.role !== 'owner' && req.user.role !== 'employee') {
@@ -83,33 +83,33 @@ const getSurveys = async (req, res) => {
       .order('createdAt', { ascending: false });
 
     if (req.user.role === 'employee') {
-      // Force filter to ONLY their own submitted surveys
+      
       query = query.eq('submittedById', req.user.id);
     } else if (req.query.employeeId) {
-      // Filter by employee if provided and user is owner
+      
       query = query.eq('submittedById', req.query.employeeId);
     }
 
     const { data: surveys, error } = await query;
 
     if (error) throw error;
-    // Add _id alias
+    
     res.json(surveys.map(s => ({ ...s, _id: s.id })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get survey stats (surveys count per employee)
-// @route   GET /api/surveys/stats
-// @access  Private (Owner)
+
+
+
 const getSurveyStats = async (req, res) => {
   try {
     if (req.user.role !== 'owner') {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    // Get all employees and their survey counts
+    
     const { data: employees, error: empError } = await supabase
       .from('User')
       .select('id, name, role')

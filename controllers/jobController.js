@@ -3,7 +3,7 @@ const JobApplication = require('../models/JobApplication');
 const SystemLog = require('../models/SystemLog');
 const { getCachedData, cacheData } = require('../utils/redis');
 
-// Helper to get settings
+
 const getSettings = async () => {
   const cacheKey = 'system_settings';
   let settings = await getCachedData(cacheKey);
@@ -16,9 +16,9 @@ const getSettings = async () => {
   return settings;
 };
 
-// @desc    Submit a new job application
-// @route   POST /api/public/career/apply
-// @access  Public
+
+
+
 const submitJobApplication = async (req, res) => {
   try {
     const settings = await getSettings();
@@ -72,9 +72,9 @@ const submitJobApplication = async (req, res) => {
   }
 };
 
-// @desc    Get all job applications
-// @route   GET /api/admin/career/applications
-// @access  Private (Admin)
+
+
+
 const getJobApplications = async (req, res) => {
   try {
     const applications = await JobApplication.findAll();
@@ -84,9 +84,9 @@ const getJobApplications = async (req, res) => {
   }
 };
 
-// @desc    Update job application status
-// @route   PATCH /api/admin/career/applications/:id
-// @access  Private (Admin)
+
+
+
 const updateJobApplicationStatus = async (req, res) => {
   try {
     const { status, statusNote } = req.body;

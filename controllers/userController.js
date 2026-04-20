@@ -3,9 +3,9 @@ const bcrypt = require('bcrypt');
 const { getCachedData, cacheData } = require('../utils/redis');
 const SystemLog = require('../models/SystemLog');
 
-// @desc    Search matching users by multi-field logic
-// @route   GET /api/users/search
-// @access  Private (Registered Member/Employee/Owner)
+
+
+
 const searchUsers = async (req, res) => {
   try {
     const { name, fatherName, nid } = req.query;
@@ -17,7 +17,7 @@ const searchUsers = async (req, res) => {
     if (fatherName?.trim()) query = query.ilike('fatherName', `%${fatherName.trim()}%`);
     if (nid?.trim()) query = query.ilike('nid', `%${nid.trim()}%`);
 
-    // Check settings for global employee read access
+    
     const cacheKey = 'system_settings';
     let settings = await getCachedData(cacheKey);
     if (!settings) {
@@ -27,12 +27,12 @@ const searchUsers = async (req, res) => {
     }
     const employeeCanViewAll = settings?.employeeCanViewAll || false;
 
-    // Employees can only search members they've created UNLESS setting allows all
+    
     if (req.user.role === 'employee' && !employeeCanViewAll) {
       query = query.eq('referredById', req.user.id);
     }
 
-    // Role-based selection
+    
     const { data: users, error } = await query;
     if (error) throw error;
 
@@ -59,9 +59,9 @@ const searchUsers = async (req, res) => {
   }
 };
 
-// @desc    Request a profile edit
-// @route   PATCH /api/users/request-edit
-// @access  Private
+
+
+
 const requestEdit = async (req, res) => {
   try {
     const { requestedChanges } = req.body;
@@ -95,9 +95,9 @@ const requestEdit = async (req, res) => {
   }
 };
 
-// @desc    Change password
-// @route   PATCH /api/users/change-password
-// @access  Private
+
+
+
 const changePassword = async (req, res) => {
   try {
     const { newPassword } = req.body;
@@ -131,9 +131,9 @@ const changePassword = async (req, res) => {
   }
 };
 
-// @desc    Public search for visitors to verify members
-// @route   GET /api/public/search
-// @access  Public
+
+
+
 const publicSearch = async (req, res) => {
   try {
     const { name, fatherName, nid } = req.query;
@@ -147,7 +147,7 @@ const publicSearch = async (req, res) => {
     const { data: users, error } = await query;
     if (error) throw error;
 
-    // Add _id alias
+    
     res.json(users.map(u => ({ ...u, _id: u.id })));
 
   } catch (error) {
@@ -155,9 +155,9 @@ const publicSearch = async (req, res) => {
   }
 };
 
-// @desc    Get public settings for registration
-// @route   GET /api/public/settings
-// @access  Public
+
+
+
 const getPublicSettings = async (req, res) => {
   try {
     const cacheKey = 'public_settings';
@@ -181,14 +181,14 @@ const getPublicSettings = async (req, res) => {
   }
 };
 
-// @desc    Update profile info
-// @route   PATCH /api/users/profile
-// @access  Private
+
+
+
 const updateProfile = async (req, res) => {
   try {
     const updateData = {};
     
-    // As per requirement: only staff/owner can change photo
+    
     if ((req.user.role === 'employee' || req.user.role === 'owner') && req.file) {
       updateData.imageUrl = req.file.path;
     }

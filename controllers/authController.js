@@ -4,7 +4,7 @@ const generateToken = require('../utils/generateToken');
 const { getCachedData, cacheData } = require('../utils/redis');
 const SystemLog = require('../models/SystemLog');
 
-// Helper to get settings with caching
+
 const getSettings = async () => {
   const cacheKey = 'system_settings';
   let settings = await getCachedData(cacheKey);
@@ -18,20 +18,20 @@ const getSettings = async () => {
     
     settings = data;
     if (settings) {
-      await cacheData(cacheKey, settings, 3600); // Cache for 1 hour
+      await cacheData(cacheKey, settings, 3600); 
     }
   }
   return settings;
 };
 
-// @desc    Register a new user
-// @route   POST /api/auth/register
-// @access  Public
+
+
+
 const registerUser = async (req, res) => {
   try {
     const { name, fatherName, dob, nid, phone, paymentNumber, password, paymentMethod, trxId } = req.body;
 
-    // Check if user exists
+    
     const { data: userExists } = await supabase
       .from('User')
       .select('id')
@@ -85,7 +85,7 @@ const registerUser = async (req, res) => {
     if (error) throw error;
 
     if (user) {
-      // Log Registration
+      
       await SystemLog.create({
         level: 'info',
         message: `New user registration: ${user.name} (${user.phone})`,
@@ -110,9 +110,9 @@ const registerUser = async (req, res) => {
   }
 };
 
-// @desc    Auth user & get token
-// @route   POST /api/auth/login
-// @access  Public
+
+
+
 const authUser = async (req, res) => {
   try {
     const { phone, password } = req.body;
@@ -132,12 +132,12 @@ const authUser = async (req, res) => {
       return res.status(401).json({ message: 'Invalid phone or password' });
     }
 
-    // Check if user is approved
+    
     if (user.status !== 'approved' && user.role !== 'owner') {
       return res.status(401).json({ message: `Your account is currently ${user.status}. You cannot log in.` });
     }
 
-    // Log Login
+    
     await SystemLog.create({
       level: 'info',
       message: `User logged in: ${user.name}`,

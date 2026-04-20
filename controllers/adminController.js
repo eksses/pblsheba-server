@@ -3,9 +3,9 @@ const bcrypt = require('bcrypt');
 const SystemLog = require('../models/SystemLog');
 const { cacheData, getCachedData, clearCache } = require('../utils/redis');
 
-// @desc    Approve/Reject a pending member
-// @route   PATCH /api/admin/approve/:id
-// @access  Private (Owner/Employee)
+
+
+
 const approveUser = async (req, res) => {
   try {
     const { status, paymentVerified } = req.body;
@@ -31,7 +31,7 @@ const approveUser = async (req, res) => {
       return res.status(404).json({ message: 'User not found or update failed' });
     }
 
-    // Log Approval/Rejection
+    
     await SystemLog.create({
       level: 'info',
       message: `Admin ${req.user.name} changed status for ${updatedUser.name} to ${status}`,
@@ -46,9 +46,9 @@ const approveUser = async (req, res) => {
   }
 };
 
-// @desc    Get dashboard metrics
-// @route   GET /api/admin/dashboard
-// @access  Private (Owner/Employee)
+
+
+
 const getMetrics = async (req, res) => {
   try {
     const { data: settings } = await supabase.from('Setting').select('registrationFee, employeeCanViewAll').eq('id', 1).single();
@@ -83,9 +83,9 @@ const getMetrics = async (req, res) => {
   }
 };
 
-// @desc    Get pending members
-// @route   GET /api/admin/pending
-// @access  Private (Owner/Employee)
+
+
+
 const getPendingMembers = async (req, res) => {
   try {
     const { data: settings } = await supabase.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
@@ -104,7 +104,7 @@ const getPendingMembers = async (req, res) => {
     const { data: pendingUsers, error } = await query.order('createdAt', { ascending: false });
 
     if (error) throw error;
-    // Add _id alias for backward compatibility
+    
     const usersWithId = pendingUsers.map(u => ({ ...u, _id: u.id }));
     res.json(usersWithId);
   } catch (error) {
@@ -112,9 +112,9 @@ const getPendingMembers = async (req, res) => {
   }
 };
 
-// @desc    Create Employee
-// @route   POST /api/admin/employees
-// @access  Private (Owner)
+
+
+
 const createEmployee = async (req, res) => {
   try {
     const { name, phone, password, nid, email, fatherName, address, dob } = req.body;
@@ -129,7 +129,7 @@ const createEmployee = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Generate a unique ID for the employee
+    
     const employeeId = require('crypto').randomUUID();
 
     const { data: employee, error } = await supabase
@@ -176,9 +176,9 @@ const createEmployee = async (req, res) => {
   }
 };
 
-// @desc    Manual Create Member
-// @route   POST /api/admin/members
-// @access  Private (Owner/Employee)
+
+
+
 const createMember = async (req, res) => {
   try {
     const { name, fatherName, dob, nid, phone, paymentMethod, paymentNumber, password, trxId } = req.body;
@@ -190,7 +190,7 @@ const createMember = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Generate unique ID for the member
+    
     const memberId = require('crypto').randomUUID();
 
     const { data: member, error } = await supabase
@@ -239,9 +239,9 @@ const createMember = async (req, res) => {
   }
 };
 
-// @desc    Get all employees
-// @route   GET /api/admin/employees
-// @access  Private (Owner)
+
+
+
 const getEmployees = async (req, res) => {
   try {
     if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
@@ -251,16 +251,16 @@ const getEmployees = async (req, res) => {
       .eq('role', 'employee');
 
     if (error) throw error;
-    // Add _id alias
+    
     res.json(employees.map(e => ({ ...e, _id: e.id })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get all members
-// @route   GET /api/admin/members
-// @access  Private (Owner/Employee)
+
+
+
 const getMembers = async (req, res) => {
   try {
     const { data: settings } = await supabase.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
@@ -279,21 +279,21 @@ const getMembers = async (req, res) => {
     const { data: members, error } = await query;
 
     if (error) throw error;
-    // Add _id alias
+    
     res.json(members.map(m => ({ ...m, _id: m.id })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Delete user
-// @route   DELETE /api/admin/users/:id
-// @access  Private (Owner)
+
+
+
 const deleteUser = async (req, res) => {
   try {
     if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
 
-    // Check if user exists
+    
     const { data: user } = await supabase.from('User').select('name, phone').eq('id', req.params.id).single();
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -313,9 +313,9 @@ const deleteUser = async (req, res) => {
   }
 };
 
-// @desc    Update arbitrary user info
-// @route   PATCH /api/admin/users/:id
-// @access  Private (Owner/Employee)
+
+
+
 const updateUser = async (req, res) => {
   try {
     const { data: user } = await supabase.from('User').select('name').eq('id', req.params.id).single();
@@ -329,7 +329,7 @@ const updateUser = async (req, res) => {
       }
     });
 
-    // Only allow updating imageUrl for staff/employees
+    
     const { data: targetUser } = await supabase.from('User').select('role').eq('id', req.params.id).single();
     if (targetUser?.role === 'employee' && req.file) {
       updateData.imageUrl = req.file.path;
@@ -363,9 +363,9 @@ const updateUser = async (req, res) => {
   }
 };
 
-// @desc    Get system settings
-// @route   GET /api/admin/settings
-// @access  Private (Owner/Employee)
+
+
+
 const getSettings = async (req, res) => {
   try {
     const cacheKey = 'system_settings';
@@ -376,7 +376,7 @@ const getSettings = async (req, res) => {
       settings = data;
 
       if (!settings) {
-        // Create initial settings if none exist
+        
         const { data: newSettings } = await supabase
           .from('Setting')
           .insert([
@@ -404,9 +404,9 @@ const getSettings = async (req, res) => {
   }
 };
 
-// @desc    Update system settings
-// @route   PATCH /api/admin/settings
-// @access  Private (Owner)
+
+
+
 const updateSettings = async (req, res) => {
   try {
     if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
@@ -430,7 +430,7 @@ const updateSettings = async (req, res) => {
       throw error;
     }
 
-    // Invalidate caches
+    
     await clearCache('system_settings');
     await clearCache('public_settings');
 
@@ -448,9 +448,9 @@ const updateSettings = async (req, res) => {
   }
 };
 
-// @desc    Get top employees based on members referred
-// @route   GET /api/admin/leaderboard
-// @access  Private (Owner/Employee)
+
+
+
 const getLeaderboard = async (req, res) => {
   try {
     const cacheKey = 'leaderboard_data';
@@ -478,7 +478,7 @@ const getLeaderboard = async (req, res) => {
       }));
 
       leaderboard.sort((a, b) => b.memberCount - a.memberCount);
-      await cacheData(cacheKey, leaderboard, 600); // 10 mins cache
+      await cacheData(cacheKey, leaderboard, 600); 
     }
 
     res.json(leaderboard);
@@ -487,9 +487,9 @@ const getLeaderboard = async (req, res) => {
   }
 };
 
-// @desc    Get all pending edit requests
-// @route   GET /api/admin/edit-requests
-// @access  Private (Owner/Employee)
+
+
+
 const getEditRequests = async (req, res) => {
   try {
     const { data: requests, error } = await supabase
@@ -498,16 +498,16 @@ const getEditRequests = async (req, res) => {
       .eq('editRequestPending', true);
 
     if (error) throw error;
-    // Add _id alias
+    
     res.json(requests.map(r => ({ ...r, _id: r.id })));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Dismiss an edit request
-// @route   PATCH /api/admin/edit-requests/:id/dismiss
-// @access  Private (Owner/Employee)
+
+
+
 const dismissEditRequest = async (req, res) => {
   try {
     const { data: updatedUser, error } = await supabase

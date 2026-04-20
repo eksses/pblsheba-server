@@ -1,6 +1,6 @@
 const supabase = require('../utils/supabase');
 
-// PostgreSQL-based SystemLog model
+
 class SystemLog {
   static async create({ level, message, metadata, userId, action, ip }) {
     try {
