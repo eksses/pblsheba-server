@@ -58,10 +58,51 @@ model Survey {
 }
 
 model Setting {
-  id                 Int      @id @default(1)
-  registrationFee    Int      @default(365)
-  employeeCanViewAll Boolean  @default(false)
-  paymentMethods     Json
+  id                     Int      @id @default(1)
+  registrationFee        Int      @default(365)
+  jobApplicationsEnabled Boolean  @default(true)
+  employeeCanViewAll     Boolean  @default(false)
+  paymentMethods         Json
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model JobApplication {
+  id                 String   @id @default(cuid())
+  postAppliedFor     String
+  officeNameCode     String?
+  date               DateTime @default(now())
+  roleCode           String
+  nameBn             String
+  nameEn             String
+  fatherName         String
+  motherName         String
+  presentAddress     String
+  permanentAddress   String
+  dob                String
+  age                Int?
+  religion           String?
+  nid                String
+  nationality        String   @default("Bangladeshi")
+  profession         String?
+  maritalStatus      String?
+  spouseName         String?
+  mobile             String
+  email              String?
+  bankName           String?
+  branch             String?
+  routingNo          String?
+  mobileBankingType  String?
+  mobileBankingNumber String?
+  education          Json?
+  nomineeName        String
+  nomineeAddress     String?
+  nomineeRelationship String?
+  nomineeMobile      String?
+  photoUrl           String?
+  signatureUrl       String?
+  status             String   @default("pending")
+  statusNote         String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }

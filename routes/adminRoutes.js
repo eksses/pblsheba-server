@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { approveUser, getMetrics, getPendingMembers, createEmployee, createMember, getEmployees, getMembers, deleteUser, updateUser, getSettings, updateSettings, getLeaderboard, getEditRequests, dismissEditRequest } = require('../controllers/adminController');
+const { getJobApplications, updateJobApplicationStatus } = require('../controllers/jobController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
 const { upload } = require('../config/cloudinary');
@@ -22,5 +23,8 @@ router.get('/settings', protect, admin, getSettings);
 router.patch('/settings', protect, admin, updateSettings);
 
 router.get('/leaderboard', protect, admin, getLeaderboard);
+
+router.get('/career/applications', protect, admin, getJobApplications);
+router.patch('/career/applications/:id', protect, admin, updateJobApplicationStatus);
 
 module.exports = router;

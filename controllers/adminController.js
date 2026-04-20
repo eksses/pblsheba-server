@@ -415,6 +415,7 @@ const updateSettings = async (req, res) => {
     if (req.body.registrationFee !== undefined) updateData.registrationFee = parseInt(req.body.registrationFee);
     if (req.body.paymentMethods) updateData.paymentMethods = JSON.parse(JSON.stringify(req.body.paymentMethods));
     if (req.body.employeeCanViewAll !== undefined) updateData.employeeCanViewAll = Boolean(req.body.employeeCanViewAll);
+    if (req.body.jobApplicationsEnabled !== undefined) updateData.jobApplicationsEnabled = Boolean(req.body.jobApplicationsEnabled);
     updateData.updatedAt = new Date().toISOString();
 
     const { data: updated, error } = await supabase

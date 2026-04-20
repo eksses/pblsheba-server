@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const settingsSchema = new mongoose.Schema({
   registrationFee: { type: Number, default: 365 },
+  jobApplicationsEnabled: { type: Boolean, default: true },
   paymentMethods: { 
     type: [{
       name: { type: String, required: true },
