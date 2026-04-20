@@ -40,6 +40,12 @@ const approveUser = async (req, res) => {
       metadata: { adminId: req.user.id, status }
     });
 
+    // Clear metrics cache for both admin and potential referred employee
+    await clearCache(`metrics_${req.user.id}_${req.user.role}`);
+    if (updatedUser.referredById) {
+      await clearCache(`metrics_${updatedUser.referredById}_employee`);
+    }
+
     res.json({ ...updatedUser, _id: updatedUser.id });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -51,33 +57,45 @@ const approveUser = async (req, res) => {
 
 const getMetrics = async (req, res) => {
   try {
+    const cacheKey = `metrics_${req.user.id}_${req.user.role}`;
+    const cached = await getCachedData(cacheKey);
+    if (cached) return res.json(cached);
+
     const { data: settings } = await supabase.from('Setting').select('registrationFee, employeeCanViewAll').eq('id', 1).single();
     const fee = settings?.registrationFee || 365;
     const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
 
-    let totalQC = supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'member');
-    let approvedQC = supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
-    let pendingQC = supabase.from('User').select('*', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
+    let totalQC = supabase.from('User').select('id', { count: 'exact', head: true }).eq('role', 'member');
+    let approvedQC = supabase.from('User').select('id', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
+    let pendingQC = supabase.from('User').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
 
     if (!canViewAll) {
-       totalQC = totalQC.eq('referredById', req.user.id);
-       approvedQC = approvedQC.eq('referredById', req.user.id);
-       pendingQC = pendingQC.eq('referredById', req.user.id);
+      totalQC = totalQC.eq('referredById', req.user.id);
+      approvedQC = approvedQC.eq('referredById', req.user.id);
+      pendingQC = pendingQC.eq('referredById', req.user.id);
     }
 
-    const { count: totalMembers } = await totalQC;
-    const { count: pendingApprovals } = await pendingQC;
-    const { count: approvedMembers } = await approvedQC;
-    const { count: totalEmployees } = await supabase.from('User').select('*', { count: 'exact', head: true }).eq('role', 'employee');
+    const [
+      { count: totalMembers },
+      { count: pendingApprovals },
+      { count: approvedMembers },
+      { count: totalEmployees }
+    ] = await Promise.all([
+      totalQC,
+      pendingQC,
+      approvedQC,
+      supabase.from('User').select('id', { count: 'exact', head: true }).eq('role', 'employee')
+    ]);
 
-    const totalCollected = (approvedMembers || 0) * fee;
-
-    res.json({
+    const metrics = {
       totalMembers: totalMembers || 0,
       totalEmployees: totalEmployees || 0,
       pendingApprovals: pendingApprovals || 0,
-      totalCollected
-    });
+      totalCollected: (approvedMembers || 0) * fee
+    };
+
+    await cacheData(cacheKey, metrics, 60);
+    res.json(metrics);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -91,9 +109,13 @@ const getPendingMembers = async (req, res) => {
     const { data: settings } = await supabase.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
     const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
 
+    const cacheKey = `pending_${req.user.id}_${canViewAll}`;
+    const cached = await getCachedData(cacheKey);
+    if (cached) return res.json(cached);
+
     let query = supabase
       .from('User')
-      .select('*')
+      .select('id, name, phone, email, status, role, createdAt, referredById')
       .eq('status', 'pending')
       .eq('role', 'member');
       
@@ -102,10 +124,10 @@ const getPendingMembers = async (req, res) => {
     }
 
     const { data: pendingUsers, error } = await query.order('createdAt', { ascending: false });
-
     if (error) throw error;
     
     const usersWithId = pendingUsers.map(u => ({ ...u, _id: u.id }));
+    await cacheData(cacheKey, usersWithId, 300);
     res.json(usersWithId);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -161,14 +183,7 @@ const createEmployee = async (req, res) => {
       throw error;
     }
 
-    await SystemLog.create({
-      level: 'info',
-      message: `Employee created: ${employee.name}`,
-      action: 'ADMIN_CREATE_EMPLOYEE',
-      userId: employee.id,
-      metadata: { adminId: req.user.id }
-    });
-
+    await clearCache(`metrics_${req.user.id}_${req.user.role}`);
     res.status(201).json({ ...employee, _id: employee.id });
   } catch (error) {
     console.error('Create Employee Error:', error);
@@ -224,14 +239,7 @@ const createMember = async (req, res) => {
       throw error;
     }
 
-    await SystemLog.create({
-      level: 'info',
-      message: `Member manually created: ${member.name}`,
-      action: 'ADMIN_CREATE_MEMBER',
-      userId: member.id,
-      metadata: { adminId: req.user.id }
-    });
-
+    await clearCache(`metrics_${req.user.id}_${req.user.role}`);
     res.status(201).json({ ...member, _id: member.id });
   } catch (error) {
     console.error('Create Member Error:', error);

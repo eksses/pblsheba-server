@@ -9,6 +9,10 @@ const SystemLog = require('../models/SystemLog');
 const searchUsers = async (req, res) => {
   try {
     const { name, fatherName, nid } = req.query;
+    const cacheKey = `search_${req.user.id}_${name || ''}_${fatherName || ''}_${nid || ''}`;
+    
+    const cached = await getCachedData(cacheKey);
+    if (cached) return res.json(cached);
 
     let query = supabase.from('User').select('id, name, fatherName, imageUrl, status, role, phone, nid, email, address');
 
@@ -17,22 +21,19 @@ const searchUsers = async (req, res) => {
     if (fatherName?.trim()) query = query.ilike('fatherName', `%${fatherName.trim()}%`);
     if (nid?.trim()) query = query.ilike('nid', `%${nid.trim()}%`);
 
-    
-    const cacheKey = 'system_settings';
-    let settings = await getCachedData(cacheKey);
+    const systemSettingsCacheKey = 'system_settings';
+    let settings = await getCachedData(systemSettingsCacheKey);
     if (!settings) {
       const { data } = await supabase.from('Setting').select('*').eq('id', 1).single();
       settings = data;
-      if (settings) await cacheData(cacheKey, settings, 3600);
+      if (settings) await cacheData(systemSettingsCacheKey, settings, 3600);
     }
     const employeeCanViewAll = settings?.employeeCanViewAll || false;
 
-    
     if (req.user.role === 'employee' && !employeeCanViewAll) {
       query = query.eq('referredById', req.user.id);
     }
 
-    
     const { data: users, error } = await query;
     if (error) throw error;
 
@@ -42,18 +43,13 @@ const searchUsers = async (req, res) => {
         return userWithId;
       }
       return {
-        id: u.id,
-        _id: u.id,
-        name: u.name,
-        fatherName: u.fatherName,
-        imageUrl: u.imageUrl,
-        status: u.status,
-        role: u.role
+        id: u.id, _id: u.id, name: u.name, fatherName: u.fatherName,
+        imageUrl: u.imageUrl, status: u.status, role: u.role
       };
     });
 
+    await cacheData(cacheKey, sanitizedUsers, 300);
     res.json(sanitizedUsers);
-
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -137,6 +133,10 @@ const changePassword = async (req, res) => {
 const publicSearch = async (req, res) => {
   try {
     const { name, fatherName, nid } = req.query;
+    const cacheKey = `pub_search_${name || ''}_${fatherName || ''}_${nid || ''}`;
+    
+    const cached = await getCachedData(cacheKey);
+    if (cached) return res.json(cached);
 
     let query = supabase.from('User').select('id, name, status, imageUrl').eq('role', 'member');
 
@@ -147,9 +147,9 @@ const publicSearch = async (req, res) => {
     const { data: users, error } = await query;
     if (error) throw error;
 
-    
-    res.json(users.map(u => ({ ...u, _id: u.id })));
-
+    const results = users.map(u => ({ ...u, _id: u.id }));
+    await cacheData(cacheKey, results, 600);
+    res.json(results);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
