@@ -8,9 +8,18 @@ const AuthService = require('../../services/authService');
  */
 
 const updateProfileImage = async (req, res) => {
+  console.log('Update Profile Image Hit');
+  console.log('Request Headers:', req.headers['content-type']);
+  console.log('Request File:', req.file);
+  console.log('Request Body:', req.body);
+
   try {
     if (!req.file) {
-      return res.status(400).json({ message: 'No image file provided' });
+      console.error('Validation Failed: No image file in request.');
+      return res.status(400).json({ 
+        message: 'No image file provided',
+        hint: 'Ensure you are sending the file in a field named "image" as multipart/form-data'
+      });
     }
 
     const imageUrl = req.file.path;
@@ -39,6 +48,7 @@ const updateProfileImage = async (req, res) => {
       user: { ...updatedUser, _id: updatedUser.id } 
     });
   } catch (error) {
+    console.error('Update Profile Image Error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -58,7 +68,6 @@ const changePassword = async (req, res) => {
       return res.status(404).json({ message: 'Admin user not found' });
     }
 
-    // Verify current password (if provided, some flows might skip this if forced)
     if (currentPassword) {
       const isMatch = await AuthService.comparePasswords(currentPassword, user.password);
       if (!isMatch) {
