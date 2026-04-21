@@ -10,6 +10,7 @@ const employeeController = require('../controllers/admin/employeeController');
 const settingsController = require('../controllers/admin/settingsController');
 const dashboardController = require('../controllers/admin/dashboardController');
 const careerController = require('../controllers/admin/careerController');
+const profileController = require('../controllers/admin/profileController');
 
 /**
  * Admin Routes Orchestrator
@@ -25,6 +26,10 @@ router.patch('/edit-requests/:id/dismiss', protect, admin, approvalController.di
 // Dashboard & Analytics
 router.get('/dashboard', protect, admin, dashboardController.getMetrics);
 router.get('/leaderboard', protect, admin, dashboardController.getLeaderboard);
+
+// Admin Self Profile
+router.post('/profile/image', protect, admin, upload.single('image'), profileController.updateProfileImage);
+router.patch('/profile/password', protect, admin, profileController.changePassword);
 
 // Member Management
 router.get('/members', protect, admin, memberController.getMembers);
