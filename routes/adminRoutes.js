@@ -28,7 +28,6 @@ router.get('/dashboard', protect, admin, dashboardController.getMetrics);
 router.get('/leaderboard', protect, admin, dashboardController.getLeaderboard);
 
 // Admin Self Profile
-router.post('/profile/image', upload.single('image'), protect, admin, profileController.updateProfileImage);
 router.patch('/profile/password', protect, admin, profileController.changePassword);
 
 // Member Management
