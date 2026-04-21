@@ -1,16 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { 
-  createSurvey, 
-  getSurveys, 
-  getSurveyStats 
-} = require('../controllers/surveyController');
+const surveyController = require('../controllers/survey/surveyController');
 const { protect } = require('../middleware/authMiddleware');
 
+/**
+ * Survey Routes Orchestrator
+ * Handles protected socio-economic data submissions and reporting.
+ */
 router.use(protect);
 
-router.post('/', createSurvey);
-router.get('/', getSurveys);
-router.get('/stats', getSurveyStats);
+router.post('/', surveyController.createSurvey);
+router.get('/', surveyController.getSurveys);
+router.get('/stats', surveyController.getSurveyStats);
 
 module.exports = router;

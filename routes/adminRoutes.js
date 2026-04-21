@@ -1,30 +1,48 @@
 const express = require('express');
 const router = express.Router();
-const { approveUser, getMetrics, getPendingMembers, createEmployee, createMember, getEmployees, getMembers, deleteUser, updateUser, getSettings, updateSettings, getLeaderboard, getEditRequests, dismissEditRequest } = require('../controllers/adminController');
-const { getJobApplications, updateJobApplicationStatus } = require('../controllers/jobController');
 const { protect, admin } = require('../middleware/authMiddleware');
-
 const { upload } = require('../config/cloudinary');
 
-router.patch('/approve/:id', protect, admin, approveUser);
-router.get('/dashboard', protect, admin, getMetrics);
-router.get('/pending', protect, admin, getPendingMembers);
-router.post('/employees', protect, admin, upload.single('image'), createEmployee);
-router.post('/members', protect, admin, upload.single('image'), createMember);
-router.get('/employees', protect, admin, getEmployees);
-router.get('/members', protect, admin, getMembers);
-router.delete('/users/:id', protect, admin, deleteUser);
-router.patch('/users/:id', protect, admin, upload.single('image'), updateUser);
+// Granular Controllers
+const approvalController = require('../controllers/admin/approvalController');
+const memberController = require('../controllers/admin/memberController');
+const employeeController = require('../controllers/admin/employeeController');
+const settingsController = require('../controllers/admin/settingsController');
+const dashboardController = require('../controllers/admin/dashboardController');
+const careerController = require('../controllers/admin/careerController');
 
-router.get('/edit-requests', protect, admin, getEditRequests);
-router.patch('/edit-requests/:id/dismiss', protect, admin, dismissEditRequest);
+/**
+ * Admin Routes Orchestrator
+ * Maps individual administrative actions to their corresponding modular controllers.
+ */
 
-router.get('/settings', protect, admin, getSettings);
-router.patch('/settings', protect, admin, updateSettings);
+// Member Approvals & Edit Requests
+router.patch('/approve/:id', protect, admin, approvalController.approveUser);
+router.get('/pending', protect, admin, approvalController.getPendingMembers);
+router.get('/edit-requests', protect, admin, approvalController.getEditRequests);
+router.patch('/edit-requests/:id/dismiss', protect, admin, approvalController.dismissEditRequest);
 
-router.get('/leaderboard', protect, admin, getLeaderboard);
+// Dashboard & Analytics
+router.get('/dashboard', protect, admin, dashboardController.getMetrics);
+router.get('/leaderboard', protect, admin, dashboardController.getLeaderboard);
 
-router.get('/career/applications', protect, admin, getJobApplications);
-router.patch('/career/applications/:id', protect, admin, updateJobApplicationStatus);
+// Member Management
+router.get('/members', protect, admin, memberController.getMembers);
+router.post('/members', protect, admin, upload.single('image'), memberController.createMember);
+router.patch('/users/:id', protect, admin, upload.single('image'), memberController.updateMember); // Legacy endpoint match
+router.delete('/users/:id', protect, admin, memberController.deleteMember); // Legacy endpoint match
+
+// Employee Management
+router.get('/employees', protect, admin, employeeController.getEmployees);
+router.post('/employees', protect, admin, upload.single('image'), employeeController.createEmployee);
+router.delete('/employees/:id', protect, admin, employeeController.deleteEmployee);
+
+// System Settings
+router.get('/settings', protect, admin, settingsController.getSettings);
+router.patch('/settings', protect, admin, settingsController.updateSettings);
+
+// Career / Applications
+router.get('/career/applications', protect, admin, careerController.getJobApplications);
+router.patch('/career/applications/:id', protect, admin, careerController.updateJobApplicationStatus);
 
 module.exports = router;
