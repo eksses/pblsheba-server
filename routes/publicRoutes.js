@@ -5,11 +5,15 @@ const { upload } = require('../config/cloudinary');
 // Granular Controllers
 const publicUserController = require('../controllers/public/publicUserController');
 const publicCareerController = require('../controllers/public/careerController');
+const healthController = require('../controllers/system/healthController');
 
 /**
  * Public Routes Orchestrator
- * Handles unauthenticated lookup and service entry points.
+ * Handles unauthenticated lookup, service entry points, and system health.
  */
+
+// System Health
+router.get('/health', healthController.getHealth);
 
 // Member Lookup
 router.get('/search', publicUserController.publicSearch);
