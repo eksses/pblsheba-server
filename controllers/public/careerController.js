@@ -31,6 +31,13 @@ const submitJobApplication = async (req, res) => {
     const photoUrl = req.files['photo'] ? req.files['photo'][0].path : null;
     const signatureUrl = req.files['signature'] ? req.files['signature'][0].path : null;
 
+    let parsedEducation = [];
+    try {
+      parsedEducation = education ? (typeof education === 'string' ? JSON.parse(education) : education) : [];
+    } catch (e) {
+      console.error('Education parsing error:', e);
+    }
+
     const application = await JobApplication.create({
       postAppliedFor, officeNameCode, roleCode,
       nameBn, nameEn, fatherName, motherName,
@@ -39,7 +46,7 @@ const submitJobApplication = async (req, res) => {
       religion, nid, nationality, profession, maritalStatus, spouseName,
       mobile, email, bankName, branch, routingNo,
       mobileBankingType, mobileBankingNumber,
-      education: education ? JSON.parse(education) : [],
+      education: parsedEducation,
       nomineeName, nomineeAddress, nomineeRelationship, nomineeMobile,
       photoUrl, signatureUrl,
     });
@@ -56,7 +63,12 @@ const submitJobApplication = async (req, res) => {
       id: application.id
     });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to submit application. Please try again.' });
+    console.error('Submit Job Application Error:', error);
+    res.status(500).json({ 
+      message: 'Failed to submit application', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 

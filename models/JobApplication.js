@@ -14,10 +14,12 @@ class JobApplication {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase JobApplication insertion error:', error);
+        throw new Error(error.message || 'Database insertion failed');
+      }
       return application;
     } catch (error) {
-      console.error('JobApplication create error:', error);
       throw error;
     }
   }

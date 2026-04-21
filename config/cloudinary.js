@@ -13,7 +13,9 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'pblsheba_members',
-    allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
+    // Removing strict allowed_formats to avoid 'unknown format' errors on some platforms
+    // Cloudinary will handle format validation on its end.
+    resource_type: 'auto',
   },
 });
 
