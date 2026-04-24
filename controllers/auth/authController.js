@@ -2,6 +2,7 @@ const supabase = require('../../utils/supabase');
 const AuthService = require('../../services/authService');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
+const { sendPushNotification, sendRoleNotification } = require('../../utils/pushNotification');
 
 /**
  * Authentication Controller
@@ -53,6 +54,20 @@ const registerUser = async (req, res) => {
       user.id,
       { ip: req.ip }
     );
+
+    // Notify Admins
+    await sendRoleNotification('owner', {
+      title: 'New Member Registration',
+      body: `${user.name} has registered and is awaiting approval.`,
+      url: '/approvals'
+    });
+
+    // Notify User about pending payment
+    await sendPushNotification(user.id, {
+      title: 'Registration Received',
+      body: 'Your registration is being processed. Payment status: PENDING.',
+      url: '/profile'
+    });
 
     res.status(201).json({
       _id: user.id,

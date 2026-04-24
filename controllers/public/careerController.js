@@ -2,6 +2,7 @@ const JobApplication = require('../../models/JobApplication');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
 const supabase = require('../../utils/supabase');
+const { sendRoleNotification } = require('../../utils/pushNotification');
 
 /**
  * Public Career Controller
@@ -51,12 +52,27 @@ const submitJobApplication = async (req, res) => {
       photoUrl, signatureUrl,
     });
 
+
+
     await LogService.info(
       `New job application received from ${nameEn || nameBn} for ${postAppliedFor}`,
       'JOB_APP_SUBMIT',
       null,
       { applicationId: application.id }
     );
+
+    // Notify Owners and Employees about new application
+    await sendRoleNotification('owner', {
+      title: 'New Job Application',
+      body: `${nameEn || nameBn} applied for ${postAppliedFor}`,
+      url: '/career'
+    });
+    
+    await sendRoleNotification('employee', {
+      title: 'New Job Application',
+      body: `${nameEn || nameBn} applied for ${postAppliedFor}`,
+      url: '/career'
+    });
 
     res.status(201).json({
       message: 'Application submitted successfully!',

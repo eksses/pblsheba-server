@@ -1,6 +1,7 @@
 const supabase = require('../../utils/supabase');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
+const { sendPushNotification } = require('../../utils/pushNotification');
 
 /**
  * Approval Controller
@@ -37,6 +38,23 @@ const approveUser = async (req, res) => {
       updatedUser.id,
       { adminId: req.user.id, status }
     );
+
+    // Notify User about status change
+    await sendPushNotification(updatedUser.id, {
+      title: `Account ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+      body: status === 'approved' 
+        ? 'Congratulations! Your PBL Sheba account has been approved.' 
+        : `Your account status has been updated to ${status}.`,
+      url: '/'
+    });
+
+    if (paymentVerified) {
+      await sendPushNotification(updatedUser.id, {
+        title: 'Payment Verified',
+        body: 'Your registration fee payment has been verified by the admin.',
+        url: '/profile'
+      });
+    }
 
     // Invalidate metrics
     await CacheService.invalidateMetrics(req.user.id, req.user.role, updatedUser.referredById);

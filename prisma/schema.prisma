@@ -34,7 +34,8 @@ model User {
   updatedAt            DateTime   @updatedAt
   surveys              Survey[]
   referredBy           User?      @relation("Referral", fields: [referredById], references: [id])
-  referrals            User[]     @relation("Referral")
+  referrals            User[]             @relation("Referral")
+  pushSubscriptions    PushSubscription[]
 }
 
 model Survey {
@@ -131,4 +132,14 @@ enum VerifiedBy {
   admin
   system
   none
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 }
