@@ -89,9 +89,6 @@ model JobApplication {
   spouseName         String?
   mobile             String
   email              String?
-  bankName           String?
-  branch             String?
-  routingNo          String?
   mobileBankingType  String?
   mobileBankingNumber String?
   education          Json?

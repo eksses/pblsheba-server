@@ -22,7 +22,7 @@ const submitJobApplication = async (req, res) => {
       nameBn, nameEn, fatherName, motherName,
       presentAddress, permanentAddress, dob, age, religion, nid,
       nationality, profession, maritalStatus, spouseName,
-      mobile, email, bankName, branch, routingNo,
+      mobile, email,
       mobileBankingType, mobileBankingNumber,
       education,
       nomineeName, nomineeAddress, nomineeRelationship, nomineeMobile
@@ -44,7 +44,7 @@ const submitJobApplication = async (req, res) => {
       presentAddress, permanentAddress, dob,
       age: age ? parseInt(age) : null,
       religion, nid, nationality, profession, maritalStatus, spouseName,
-      mobile, email, bankName, branch, routingNo,
+      mobile, email,
       mobileBankingType, mobileBankingNumber,
       education: parsedEducation,
       nomineeName, nomineeAddress, nomineeRelationship, nomineeMobile,
