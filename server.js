@@ -36,18 +36,31 @@ app.use('/api/surveys', surveyRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.get('/api/public/health', async (req, res) => {
-  const health = {
-    timestamp: new Date(),
-    status: 'ok',
-    services: {
-      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-      redis: require('./utils/redis').redis.status === 'ready' ? 'connected' : 'disconnected',
-      supabase: 'active', // Since it's HTTPS based
-      prisma: 'active'
-    },
-    env: process.env.NODE_ENV
-  };
-  res.json(health);
+  try {
+    const redisUtil = require('./utils/redis');
+    const health = {
+      timestamp: new Date(),
+      status: 'ok',
+      services: {
+        mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        redis: (redisUtil.redis && redisUtil.redis.status === 'ready') ? 'connected' : 'disconnected',
+        supabase: 'active',
+        prisma: 'active'
+      },
+      env: process.env.NODE_ENV
+    };
+    res.json(health);
+  } catch (err) {
+    res.status(200).json({
+      status: 'partial_ok',
+      services: {
+        mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        supabase: 'active',
+        prisma: 'active'
+      },
+      error: 'Health check encountered an internal error'
+    });
+  }
 });
 
 // Handle favicon requests to prevent 404 logs
