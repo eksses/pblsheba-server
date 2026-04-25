@@ -12,6 +12,7 @@ const dashboardController = require('../controllers/admin/dashboardController');
 const careerController = require('../controllers/admin/careerController');
 const profileController = require('../controllers/admin/profileController');
 const smsController = require('../controllers/payment/smsController');
+const surveyController = require('../controllers/staff/surveyController');
 
 /**
  * Admin Routes Orchestrator
@@ -53,5 +54,9 @@ router.post('/settings/regenerate-sms-key', protect, admin, settingsController.r
 // Career / Applications
 router.get('/career/applications', protect, admin, careerController.getJobApplications);
 router.patch('/career/applications/:id', protect, admin, careerController.updateJobApplicationStatus);
+
+// Staff Survey Operations
+router.post('/surveys', protect, surveyController.createSurvey);
+router.get('/surveys/my-stats', protect, surveyController.getMyStats);
 
 module.exports = router;

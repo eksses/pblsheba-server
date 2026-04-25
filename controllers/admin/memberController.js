@@ -100,6 +100,10 @@ const deleteMember = async (req, res) => {
 
 const updateMember = async (req, res) => {
   try {
+    if (req.user.role !== 'owner') {
+      return res.status(403).json({ message: 'Only owners can edit member details' });
+    }
+
     const { data: user } = await supabase.from('User').select('name').eq('id', req.params.id).single();
     if (!user) return res.status(404).json({ message: 'User not found' });
 

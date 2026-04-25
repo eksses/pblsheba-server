@@ -1,9 +1,22 @@
 const Redis = require('ioredis');
 
-const redis = new Redis(process.env.REDIS_URL, {
-  maxRetriesPerRequest: 1,
-  enableOfflineQueue: false // Prevent hanging if Redis is down
-});
+const isTest = process.env.NODE_ENV === 'test';
+
+let redis;
+if (isTest) {
+  // Mock redis for tests
+  redis = {
+    on: () => {},
+    get: async () => null,
+    set: async () => 'OK',
+    del: async () => 1
+  };
+} else {
+  redis = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 1,
+    enableOfflineQueue: false
+  });
+}
 
 redis.on('connect', () => {
   console.log('Redis Connected Successfully');
