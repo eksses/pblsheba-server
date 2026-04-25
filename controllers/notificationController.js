@@ -19,16 +19,19 @@ const subscribe = async (req, res) => {
       return res.status(400).json({ message: 'Missing encryption keys (p256dh or auth)' });
     }
 
-    // Clean up: remove ALL old subscriptions for this user (prevents duplicates)
-    await supabase
-      .from('PushSubscription')
-      .delete()
-      .eq('userId', userId);
-
-    // Insert fresh subscription
+    // Use upsert to handle existing subscriptions for this endpoint
+    // This allows multiple devices per user while keeping endpoints unique
     const { error } = await supabase
       .from('PushSubscription')
-      .insert({ id: generateId(), userId, endpoint, p256dh: keys.p256dh, auth: keys.auth });
+      .upsert({ 
+        userId, 
+        endpoint, 
+        p256dh: keys.p256dh, 
+        auth: keys.auth 
+      }, { 
+        onConflict: 'endpoint' 
+      });
+    
     if (error) throw error;
 
     res.status(201).json({ message: 'Subscription saved successfully' });
