@@ -60,9 +60,12 @@ app.get('/api/debug/test-push-table', async (req, res) => {
 
     // Test 2: Can we insert?
     const testEndpoint = 'https://test-diagnostic-' + Date.now();
+    const crypto = require('crypto');
+    const testId = crypto.randomUUID().replace(/-/g, '').slice(0, 25);
     const { error: insertError } = await supabase
       .from('PushSubscription')
       .insert({ 
+        id: testId,
         userId: 'test-diagnostic', 
         endpoint: testEndpoint, 
         p256dh: 'test', 

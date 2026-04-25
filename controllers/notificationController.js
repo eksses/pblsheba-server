@@ -1,5 +1,8 @@
+const crypto = require('crypto');
 const supabase = require('../utils/supabase');
 const { sendPushNotification, sendRoleNotification } = require('../utils/pushNotification');
+
+const generateId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 25);
 
 const subscribe = async (req, res) => {
   try {
@@ -32,7 +35,7 @@ const subscribe = async (req, res) => {
     } else {
       const { error } = await supabase
         .from('PushSubscription')
-        .insert({ userId, endpoint, p256dh: keys.p256dh, auth: keys.auth });
+        .insert({ id: generateId(), userId, endpoint, p256dh: keys.p256dh, auth: keys.auth });
       if (error) throw error;
     }
 
