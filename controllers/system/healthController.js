@@ -85,7 +85,9 @@ const getHealth = async (req, res) => {
     }
 
     // Final global status check
-    const allDown = Object.values(healthInfo.services).every(s => s.status === 'down' || s.status === 'error');
+    const allDown = Object.values(healthInfo.services).every(s => 
+      ['down', 'error', 'disconnected'].includes(s.status)
+    );
     if (allDown) healthInfo.status = 'down';
 
     res.status(healthInfo.status === 'down' ? 503 : 200).json(healthInfo);

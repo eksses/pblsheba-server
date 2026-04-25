@@ -9,7 +9,8 @@ if (isTest) {
     on: () => {},
     get: async () => null,
     set: async () => 'OK',
-    del: async () => 1
+    del: async () => 1,
+    ping: async () => 'PONG'
   };
 } else {
   redis = new Redis(process.env.REDIS_URL, {
