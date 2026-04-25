@@ -97,9 +97,62 @@ const mySubscriptions = async (req, res) => {
   }
 };
 
+const broadcast = async (req, res) => {
+  try {
+    const { role, userId, title, body, url } = req.body;
+
+    if (!title) {
+      return res.status(400).json({ message: 'Title is required' });
+    }
+
+    let result;
+    if (userId) {
+      result = await sendPushNotification(userId, { title, body, url: url || '/' });
+    } else if (role) {
+      result = await sendRoleNotification(role, { title, body, url: url || '/' });
+    } else {
+      return res.status(400).json({ message: 'Provide either userId or role' });
+    }
+
+    res.json({ message: 'Broadcast complete', delivery: result });
+  } catch (error) {
+    console.error('Broadcast error:', error.message);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const allSubscriptions = async (req, res) => {
+  try {
+    const subscriptions = await prisma.pushSubscription.findMany({
+      select: {
+        id: true,
+        userId: true,
+        endpoint: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({
+      count: subscriptions.length,
+      subscriptions: subscriptions.map(s => ({
+        id: s.id,
+        userId: s.userId,
+        endpoint: s.endpoint.substring(0, 60) + '...',
+        createdAt: s.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('List all subscriptions error:', error.message);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   subscribe,
   unsubscribe,
   testPush,
-  mySubscriptions
+  broadcast,
+  mySubscriptions,
+  allSubscriptions
 };
