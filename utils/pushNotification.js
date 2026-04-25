@@ -28,7 +28,15 @@ const sendPushNotification = async (userId, payload) => {
       return { sent: 0, failed: 0, cleaned: 0 };
     }
 
-    const notificationPayload = JSON.stringify(payload);
+    // Standardize payload format for iOS compatibility
+    const standardPayload = {
+      title: payload.title || 'PBL Sheba',
+      body: payload.body || 'You have a new notification',
+      icon: payload.icon || '/logo.png',
+      url: payload.url || '/'
+    };
+    
+    const notificationPayload = JSON.stringify(standardPayload);
     let sent = 0;
     let failed = 0;
     let cleaned = 0;
