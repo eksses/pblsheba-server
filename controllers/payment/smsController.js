@@ -73,12 +73,15 @@ const receiveSms = async (req, res) => {
  * Get Unprocessed SMS (for Admin View)
  */
 const getUnprocessedSms = async (req, res) => {
-  try {
+    if (require('mongoose').connection.readyState !== 1) {
+      throw new Error('Database not connected. Please check MONGO_URI.');
+    }
     const list = await PaymentSms.find({ status: 'unprocessed' })
       .sort({ createdAt: -1 })
       .limit(50);
     res.json(list);
   } catch (error) {
+    logger.error(`Failed to fetch unprocessed SMS: ${error.message}`);
     res.status(500).json({ message: error.message });
   }
 };

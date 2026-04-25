@@ -7,9 +7,11 @@ dotenv.config();
 
 const mongoose = require('mongoose');
 // Disable command buffering to prevent hanging if DB is not connected
-mongoose.set('bufferCommands', false);
+// Enable command buffering (default) to wait for connection before failing
+mongoose.set('bufferCommands', true);
 
-connectDB();
+// Initial connection attempt
+connectDB().catch(err => console.error('Initial DB connect failed:', err.message));
 
 const app = express();
 
@@ -126,6 +128,30 @@ app.get('/api/debug/test-push-table', async (req, res) => {
     results.exception = err.message;
     res.json(results);
   }
+});
+
+app.get('/api/debug/mongo', async (req, res) => {
+  const status = {
+    readyState: mongoose.connection.readyState,
+    readyStateDesc: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState],
+    uriSet: !!process.env.MONGO_URI,
+    uriLength: process.env.MONGO_URI ? process.env.MONGO_URI.length : 0,
+    nodeEnv: process.env.NODE_ENV,
+    vercel: process.env.VERCEL
+  };
+  
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      const connectDB = require('./config/db');
+      await connectDB();
+      status.newReadyState = mongoose.connection.readyState;
+      status.newReadyStateDesc = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState];
+    } catch (err) {
+      status.connectError = err.message;
+    }
+  }
+
+  res.json(status);
 });
 
 // Handle favicon requests to prevent 404 logs
