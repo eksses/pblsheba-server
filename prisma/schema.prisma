@@ -63,6 +63,7 @@ model Setting {
   registrationFee        Int      @default(365)
   jobApplicationsEnabled Boolean  @default(true)
   employeeCanViewAll     Boolean  @default(false)
+  smsWebhookKey          String?  @default("pblsheba_secret_key")
   paymentMethods         Json
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt

@@ -5,6 +5,7 @@ const { upload } = require('../config/cloudinary');
 // Granular Controllers
 const publicUserController = require('../controllers/public/publicUserController');
 const publicCareerController = require('../controllers/public/careerController');
+const smsController = require('../controllers/payment/smsController');
 const healthController = require('../controllers/system/healthController');
 
 /**
@@ -14,6 +15,9 @@ const healthController = require('../controllers/system/healthController');
 
 // System Health
 router.get('/health', healthController.getHealth);
+
+// SMS Webhook (for automated payment verification)
+router.post('/sms-webhook', smsController.receiveSms);
 
 // Member Lookup
 router.get('/search', publicUserController.publicSearch);

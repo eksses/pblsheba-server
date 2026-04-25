@@ -131,9 +131,36 @@ app.get('/api/debug/test-push-table', async (req, res) => {
 // Handle favicon requests to prevent 404 logs
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
+const { ZodError } = require('zod');
+
+const logger = require('./utils/logger');
+
 // Global Error Handler
 app.use((err, req, res, next) => {
-  console.error('Global Error Handler caught:', err);
+  // Handle Zod Validation Errors
+  if (err instanceof ZodError) {
+    logger.warn('Validation Failed:', { 
+      path: req.path, 
+      method: req.method, 
+      errors: err.errors.map(e => ({ path: e.path.join('.'), message: e.message })) 
+    });
+    return res.status(400).json({
+      message: 'Validation Failed',
+      errors: err.errors.map(e => ({
+        path: e.path.join('.'),
+        message: e.message
+      }))
+    });
+  }
+
+  logger.error('Unhandled Error:', {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    user: req.user ? req.user.id : 'anonymous'
+  });
+
   res.status(err.status || 500).json({
     message: err.message || 'Internal Server Error',
     error: process.env.NODE_ENV === 'development' ? err : {}

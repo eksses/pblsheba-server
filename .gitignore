@@ -5,6 +5,10 @@ node_modules/
 
 # Testing
 /coverage
+tests/
+*.test.js
+*.spec.js
+TEST_RESULTS.md
 
 # Production
 /build

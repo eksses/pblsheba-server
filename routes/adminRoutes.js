@@ -11,6 +11,7 @@ const settingsController = require('../controllers/admin/settingsController');
 const dashboardController = require('../controllers/admin/dashboardController');
 const careerController = require('../controllers/admin/careerController');
 const profileController = require('../controllers/admin/profileController');
+const smsController = require('../controllers/payment/smsController');
 
 /**
  * Admin Routes Orchestrator
@@ -22,6 +23,9 @@ router.patch('/approve/:id', protect, admin, approvalController.approveUser);
 router.get('/pending', protect, admin, approvalController.getPendingMembers);
 router.get('/edit-requests', protect, admin, approvalController.getEditRequests);
 router.patch('/edit-requests/:id/dismiss', protect, admin, approvalController.dismissEditRequest);
+
+// Payment Automation Logs
+router.get('/payments/sms', protect, admin, smsController.getUnprocessedSms);
 
 // Dashboard & Analytics
 router.get('/dashboard', protect, admin, dashboardController.getMetrics);
@@ -44,6 +48,7 @@ router.delete('/employees/:id', protect, admin, employeeController.deleteEmploye
 // System Settings
 router.get('/settings', protect, admin, settingsController.getSettings);
 router.patch('/settings', protect, admin, settingsController.updateSettings);
+router.post('/settings/regenerate-sms-key', protect, admin, settingsController.regenerateSmsApiKey);
 
 // Career / Applications
 router.get('/career/applications', protect, admin, careerController.getJobApplications);
