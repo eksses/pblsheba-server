@@ -9,7 +9,7 @@ const AuthService = require('../../services/authService');
  */
 const createMember = async (req, res) => {
   try {
-    const { name, fatherName, dob, nid, phone, paymentMethod, paymentNumber, password, trxId } = req.body;
+    const { name, fatherName, dob, nid, phone, email, address, paymentMethod, paymentNumber, password, trxId } = req.body;
 
     const { data: exists } = await supabase.from('User').select('id').eq('phone', phone).single();
     if (exists) return res.status(400).json({ message: 'Phone already in use' });
@@ -27,6 +27,8 @@ const createMember = async (req, res) => {
         dob: dob ? new Date(dob).toISOString() : new Date('1990-01-01').toISOString(),
         nid,
         phone,
+        email,
+        address,
         password: hashedPassword,
         imageUrl,
         role: 'member',
