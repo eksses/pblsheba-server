@@ -73,6 +73,7 @@ const receiveSms = async (req, res) => {
  * Get Unprocessed SMS (for Admin View)
  */
 const getUnprocessedSms = async (req, res) => {
+  try {
     if (require('mongoose').connection.readyState !== 1) {
       throw new Error('Database not connected. Please check MONGO_URI.');
     }
