@@ -19,20 +19,59 @@ const subscribe = async (req, res) => {
       return res.status(400).json({ message: 'Missing encryption keys (p256dh or auth)' });
     }
 
-    // Use upsert to handle existing subscriptions for this endpoint
-    // This allows multiple devices per user while keeping endpoints unique
-    const { error } = await supabase
+    // Manual check-then-act to ensure maximum reliability and correct ID handling
+    const { data: existingSub, error: fetchError } = await supabase
       .from('PushSubscription')
-      .upsert({ 
-        userId, 
-        endpoint, 
-        p256dh: keys.p256dh, 
-        auth: keys.auth 
-      }, { 
-        onConflict: 'endpoint' 
-      });
+      .select('id')
+      .eq('endpoint', endpoint)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+
+    let error;
+    let isNew = false;
+    if (existingSub) {
+      // Update existing subscription's keys and owner
+      const { error: updateError } = await supabase
+        .from('PushSubscription')
+        .update({ 
+          userId, 
+          p256dh: keys.p256dh, 
+          auth: keys.auth 
+        })
+        .eq('endpoint', endpoint);
+      error = updateError;
+    } else {
+      // Insert new subscription with generated ID
+      const { error: insertError } = await supabase
+        .from('PushSubscription')
+        .insert({ 
+          id: generateId(), 
+          userId, 
+          endpoint, 
+          p256dh: keys.p256dh, 
+          auth: keys.auth 
+        });
+      error = insertError;
+      isNew = true;
+    }
     
     if (error) throw error;
+
+    // Send welcome notification for first-time activation only
+    if (isNew) {
+      setTimeout(async () => {
+        try {
+          await sendPushNotification(userId, {
+            title: 'PBL Sheba',
+            body: 'Welcome! Push notifications are now enabled on this device.',
+            url: '/'
+          });
+        } catch (err) {
+          console.error('Welcome notification failed:', err);
+        }
+      }, 1000);
+    }
 
     res.status(201).json({ message: 'Subscription saved successfully' });
   } catch (error) {
