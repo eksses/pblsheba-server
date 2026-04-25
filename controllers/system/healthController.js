@@ -42,22 +42,39 @@ const getHealth = async (req, res) => {
     try {
       const dbState = mongoose.connection.readyState;
       const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
-      healthInfo.services.mongodb.status = states[dbState] || 'unknown';
+      
+      // Extract masked URI for debugging
+      const rawUri = process.env.MONGO_URI || '';
+      const maskedUri = rawUri.replace(/:([^:@]+)@/, ':****@');
+      const dbHost = mongoose.connection.host || 'unknown';
+      const dbName = mongoose.connection.name || 'unknown';
+
+      healthInfo.services.mongodb = {
+        status: states[dbState] || 'unknown',
+        host: dbHost,
+        database: dbName,
+        uri: maskedUri
+      };
+      
       if (dbState !== 1) healthInfo.status = 'partially_degraded';
     } catch (e) {
       healthInfo.services.mongodb.status = 'error';
+      healthInfo.services.mongodb.message = e.message;
     }
 
     // 3. Check Redis
     try {
+      const redisUrl = process.env.REDIS_URL || 'local';
+      const maskedRedis = redisUrl.replace(/:([^:@]+)@/, ':****@');
+      
       if (redis && typeof redis.ping === 'function') {
         const pingStatus = await redis.ping();
-        if (pingStatus === 'PONG') {
-          healthInfo.services.redis.status = 'connected';
-        } else {
-          healthInfo.services.redis.status = 'error';
-          healthInfo.status = 'partially_degraded';
-        }
+        healthInfo.services.redis = {
+          status: pingStatus === 'PONG' ? 'connected' : 'error',
+          host: redis.options?.host || 'unknown',
+          uri: maskedRedis
+        };
+        if (pingStatus !== 'PONG') healthInfo.status = 'partially_degraded';
       } else {
         healthInfo.services.redis.status = 'not_configured';
       }
