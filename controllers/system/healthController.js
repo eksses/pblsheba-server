@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const supabase = require('../../utils/supabase');
 const { redis } = require('../../utils/redis');
 
@@ -10,43 +11,65 @@ const getHealth = async (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    platform: process.platform,
+    version: process.version,
+    memory: process.memoryUsage(),
     environment: process.env.NODE_ENV || 'production',
     services: {
-      database: { status: 'down', message: null },
-      cache: { status: 'down', message: null }
+      supabase: { status: 'down', message: null },
+      mongodb: { status: 'down', message: null },
+      redis: { status: 'down', message: null }
     }
   };
 
   try {
-    // Check Supabase
-    const { error: dbError } = await supabase.from('Setting').select('id').limit(1);
-    if (dbError) {
-      healthInfo.services.database.status = 'error';
-      healthInfo.services.database.message = dbError.message;
-      healthInfo.status = 'partially_degraded';
-    } else {
-      healthInfo.services.database.status = 'up';
+    // 1. Check Supabase (Prisma Context)
+    try {
+      const { error: dbError } = await supabase.from('Setting').select('id').limit(1);
+      if (dbError) {
+        healthInfo.services.supabase.status = 'error';
+        healthInfo.services.supabase.message = dbError.message;
+        healthInfo.status = 'partially_degraded';
+      } else {
+        healthInfo.services.supabase.status = 'connected';
+      }
+    } catch (e) {
+      healthInfo.services.supabase.status = 'error';
+      healthInfo.services.supabase.message = e.message;
     }
 
-    // Check Redis
+    // 2. Check MongoDB (Mongoose Context)
     try {
-      const pingStatus = await redis.ping();
-      if (pingStatus === 'PONG') {
-        healthInfo.services.cache.status = 'up';
+      const dbState = mongoose.connection.readyState;
+      const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+      healthInfo.services.mongodb.status = states[dbState] || 'unknown';
+      if (dbState !== 1) healthInfo.status = 'partially_degraded';
+    } catch (e) {
+      healthInfo.services.mongodb.status = 'error';
+    }
+
+    // 3. Check Redis
+    try {
+      if (redis && typeof redis.ping === 'function') {
+        const pingStatus = await redis.ping();
+        if (pingStatus === 'PONG') {
+          healthInfo.services.redis.status = 'connected';
+        } else {
+          healthInfo.services.redis.status = 'error';
+          healthInfo.status = 'partially_degraded';
+        }
       } else {
-        healthInfo.services.cache.status = 'error';
-        healthInfo.status = 'partially_degraded';
+        healthInfo.services.redis.status = 'not_configured';
       }
     } catch (redisErr) {
-      healthInfo.services.cache.status = 'error';
-      healthInfo.services.cache.message = redisErr.message;
+      healthInfo.services.redis.status = 'error';
+      healthInfo.services.redis.message = redisErr.message;
       healthInfo.status = 'partially_degraded';
     }
 
-    // Determine overall status
-    if (healthInfo.services.database.status === 'down' && healthInfo.services.cache.status === 'down') {
-      healthInfo.status = 'down';
-    }
+    // Final global status check
+    const allDown = Object.values(healthInfo.services).every(s => s.status === 'down' || s.status === 'error');
+    if (allDown) healthInfo.status = 'down';
 
     res.status(healthInfo.status === 'down' ? 503 : 200).json(healthInfo);
   } catch (error) {
