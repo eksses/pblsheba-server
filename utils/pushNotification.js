@@ -28,13 +28,13 @@ const sendPushNotification = async (userId, payload) => {
       return { sent: 0, failed: 0, cleaned: 0 };
     }
 
-    // Standardize payload format to match the provided article's structure
+    // Align exactly with the iOS WebPush article structure
     const standardPayload = {
       title: payload.title || 'PBL Sheba',
       body: payload.body || payload.message || 'You have a new notification',
-      message: payload.message || payload.body || 'You have a new notification', // Required by the article's SW example
-      icon: payload.icon || '/logo.png',
-      url: payload.url || '/'
+      data: {
+        url: payload.url || '/'
+      }
     };
     
     const notificationPayload = JSON.stringify(standardPayload);
