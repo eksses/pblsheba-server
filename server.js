@@ -37,57 +37,89 @@ app.use('/api/notifications', notificationRoutes);
 
 // System health checks are handled in publicRoutes via healthController
 
-// Diagnostic: test PushSubscription table directly (remove after debugging)
+// Diagnostic: comprehensive push system test (remove after debugging)
 app.get('/api/debug/test-push-table', async (req, res) => {
+  const results = {};
+  
   try {
     const supabase = require('./utils/supabase');
+    const webpush = require('web-push');
     
-    // Test 1: Can we read from the table?
-    const { data: readData, error: readError } = await supabase
+    // Check 1: VAPID configured?
+    results.vapid = {
+      publicKey: process.env.VAPID_PUBLIC_KEY ? process.env.VAPID_PUBLIC_KEY.substring(0, 20) + '...' : 'MISSING',
+      privateKey: process.env.VAPID_PRIVATE_KEY ? 'SET (' + process.env.VAPID_PRIVATE_KEY.length + ' chars)' : 'MISSING',
+      subject: process.env.VAPID_SUBJECT || 'MISSING'
+    };
+
+    // Check 2: Read subscriptions
+    const { data: subs, error: readError } = await supabase
       .from('PushSubscription')
-      .select('id')
-      .limit(1);
-    
+      .select('id, userId, endpoint')
+      .limit(5);
+
     if (readError) {
-      return res.json({ 
-        step: 'READ_FAILED', 
-        error: readError.message, 
-        code: readError.code, 
-        details: readError.details, 
-        hint: readError.hint 
-      });
+      results.subscriptions = { error: readError.message };
+      return res.json(results);
+    }
+    
+    results.subscriptions = {
+      count: subs?.length || 0,
+      endpoints: subs?.map(s => s.endpoint.substring(0, 80) + '...') || []
+    };
+
+    // Check 3: Try live push to first subscription
+    if (subs && subs.length > 0) {
+      const { data: fullSub } = await supabase
+        .from('PushSubscription')
+        .select('*')
+        .eq('id', subs[0].id)
+        .single();
+
+      if (fullSub) {
+        // Re-init VAPID just to be safe
+        try {
+          webpush.setVapidDetails(
+            process.env.VAPID_SUBJECT,
+            process.env.VAPID_PUBLIC_KEY,
+            process.env.VAPID_PRIVATE_KEY
+          );
+        } catch (vapidErr) {
+          results.vapidInitError = vapidErr.message;
+        }
+
+        const pushConfig = {
+          endpoint: fullSub.endpoint,
+          keys: { p256dh: fullSub.p256dh, auth: fullSub.auth }
+        };
+
+        try {
+          const pushResult = await webpush.sendNotification(
+            pushConfig,
+            JSON.stringify({ title: 'PBL Diagnostic', body: 'If you see this, push works!', url: '/' })
+          );
+          results.livePush = {
+            status: 'SUCCESS',
+            statusCode: pushResult.statusCode,
+            headers: pushResult.headers,
+            body: pushResult.body
+          };
+        } catch (pushErr) {
+          results.livePush = {
+            status: 'FAILED',
+            statusCode: pushErr.statusCode,
+            body: pushErr.body,
+            message: pushErr.message,
+            endpoint: fullSub.endpoint.substring(0, 80)
+          };
+        }
+      }
     }
 
-    // Test 2: Can we insert?
-    const testEndpoint = 'https://test-diagnostic-' + Date.now();
-    const crypto = require('crypto');
-    const testId = crypto.randomUUID().replace(/-/g, '').slice(0, 25);
-    const { error: insertError } = await supabase
-      .from('PushSubscription')
-      .insert({ 
-        id: testId,
-        userId: 'test-diagnostic', 
-        endpoint: testEndpoint, 
-        p256dh: 'test', 
-        auth: 'test' 
-      });
-
-    if (insertError) {
-      return res.json({ 
-        step: 'INSERT_FAILED', 
-        error: insertError.message, 
-        code: insertError.code, 
-        details: insertError.details, 
-        hint: insertError.hint 
-      });
-    }
-
-    // Test 3: Clean up
-    await supabase.from('PushSubscription').delete().eq('endpoint', testEndpoint);
-
-    res.json({ step: 'ALL_PASSED', readCount: readData?.length || 0 });
+    res.json(results);
   } catch (err) {
-    res.json({ step: 'EXCEPTION', error: err.message, stack: err.stack?.split('\n').slice(0, 3) });
+    results.exception = err.message;
+    res.json(results);
   }
 });
 
