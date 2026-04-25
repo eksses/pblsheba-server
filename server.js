@@ -96,7 +96,12 @@ app.get('/api/debug/test-push-table', async (req, res) => {
         try {
           const pushResult = await webpush.sendNotification(
             pushConfig,
-            JSON.stringify({ title: 'PBL Diagnostic', body: 'If you see this, push works!', url: '/' })
+            JSON.stringify({ 
+              title: 'PBL Diagnostic', 
+              body: 'If you see this, push works!', 
+              icon: '/logo.png', 
+              url: '/' 
+            })
           );
           results.livePush = {
             status: 'SUCCESS',
