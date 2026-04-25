@@ -138,18 +138,20 @@ const logger = require('./utils/logger');
 // Global Error Handler
 app.use((err, req, res, next) => {
   // Handle Zod Validation Errors
-  if (err instanceof ZodError) {
-    logger.warn('Validation Failed:', { 
-      path: req.path, 
-      method: req.method, 
-      errors: err.errors.map(e => ({ path: e.path.join('.'), message: e.message })) 
+  const zodIssues = err.issues || err.errors;
+  if (err instanceof ZodError || (err.name === 'ZodError' && zodIssues)) {
+    const formatted = (zodIssues || []).map(e => ({
+      path: Array.isArray(e.path) ? e.path.join('.') : String(e.path || ''),
+      message: e.message
+    }));
+    logger.warn('Validation Failed:', {
+      path: req.path,
+      method: req.method,
+      errors: formatted
     });
     return res.status(400).json({
       message: 'Validation Failed',
-      errors: err.errors.map(e => ({
-        path: e.path.join('.'),
-        message: e.message
-      }))
+      errors: formatted
     });
   }
 

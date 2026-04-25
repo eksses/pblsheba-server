@@ -9,10 +9,8 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.id },
-        select: { id: true, name: true, phone: true, role: true, status: true }
-      });
+      const supabase = require('../utils/supabase');
+      const { data: user } = await supabase.from('User').select('id, name, phone, role, status').eq('id', decoded.id).single();
 
       if (!user) {
         logger.warn(`Auth Attempt Failed: User ${decoded.id} not found.`);
