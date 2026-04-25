@@ -36,6 +36,9 @@ app.get('/', (req, res) => {
   res.send('PBL Sheba API is running...');
 });
 
+// Handle favicon requests to prevent 404 logs
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Global Error Handler caught:', err);
