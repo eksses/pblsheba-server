@@ -1,6 +1,9 @@
 const Redis = require('ioredis');
 
-const redis = new Redis(process.env.REDIS_URL);
+const redis = new Redis(process.env.REDIS_URL, {
+  maxRetriesPerRequest: 1,
+  enableOfflineQueue: false // Prevent hanging if Redis is down
+});
 
 redis.on('connect', () => {
   console.log('Redis Connected Successfully');

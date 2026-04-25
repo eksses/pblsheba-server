@@ -16,13 +16,21 @@ class LogService {
    */
   static async create({ level = 'info', message, action, userId, metadata = {} }) {
     try {
-      await SystemLog.create({
+      const mongoose = require('mongoose');
+      // If DB is not connected, just log to console and don't get stuck
+      if (mongoose.connection.readyState !== 1) {
+        console.log(`[${level.toUpperCase()}][${action}] ${message}`, metadata);
+        return;
+      }
+
+      // Don't 'await' the create so the main process doesn't wait for DB write
+      SystemLog.create({
         level,
         message,
         action,
         userId,
         metadata
-      });
+      }).catch(err => console.error('Log creation error:', err.message));
     } catch (err) {
       console.error('CRITICAL: Failed to create system log:', err.message);
     }

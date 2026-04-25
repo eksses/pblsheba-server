@@ -43,3 +43,9 @@ yarn-error.log*
 /prisma/migrations/
 .next/
 /public/uploads/
+
+*.log
+
+*.log
+logs/
+log/

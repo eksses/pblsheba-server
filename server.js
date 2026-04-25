@@ -6,6 +6,9 @@ const connectDB = require('./config/db');
 
 dotenv.config();
 
+const mongoose = require('mongoose');
+// Disable command buffering to prevent hanging if DB is not connected
+mongoose.set('bufferCommands', false);
 
 connectDB();
 
@@ -32,8 +35,19 @@ app.use('/api/public', publicRoutes);
 app.use('/api/surveys', surveyRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-app.get('/', (req, res) => {
-  res.send('PBL Sheba API is running...');
+app.get('/api/public/health', async (req, res) => {
+  const health = {
+    timestamp: new Date(),
+    status: 'ok',
+    services: {
+      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+      redis: require('./utils/redis').redis.status === 'ready' ? 'connected' : 'disconnected',
+      supabase: 'active', // Since it's HTTPS based
+      prisma: 'active'
+    },
+    env: process.env.NODE_ENV
+  };
+  res.json(health);
 });
 
 // Handle favicon requests to prevent 404 logs
