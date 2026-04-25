@@ -18,9 +18,15 @@ const app = express();
 app.use(express.json());
 
 
-app.use(cors());
+// Configure CORS to accept all origins temporarily
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
+}));
 
-
+// Explicitly handle all OPTIONS requests for preflight
+app.options('*', cors());
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');
