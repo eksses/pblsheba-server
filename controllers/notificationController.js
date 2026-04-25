@@ -16,25 +16,35 @@ const subscribe = async (req, res) => {
       return res.status(400).json({ message: 'Missing encryption keys (p256dh or auth)' });
     }
 
-    await prisma.pushSubscription.upsert({
-      where: { endpoint },
-      update: {
-        userId,
-        p256dh: keys.p256dh,
-        auth: keys.auth
-      },
-      create: {
-        userId,
-        endpoint,
-        p256dh: keys.p256dh,
-        auth: keys.auth
-      }
+    // Check if subscription already exists
+    const existing = await prisma.pushSubscription.findUnique({
+      where: { endpoint }
     });
+
+    if (existing) {
+      await prisma.pushSubscription.update({
+        where: { endpoint },
+        data: {
+          userId,
+          p256dh: keys.p256dh,
+          auth: keys.auth
+        }
+      });
+    } else {
+      await prisma.pushSubscription.create({
+        data: {
+          userId,
+          endpoint,
+          p256dh: keys.p256dh,
+          auth: keys.auth
+        }
+      });
+    }
 
     res.status(201).json({ message: 'Subscription saved successfully' });
   } catch (error) {
-    console.error('Subscription error:', error.message);
-    res.status(500).json({ message: 'Failed to save subscription' });
+    console.error('Subscription error:', error.message, error.code, error.meta);
+    res.status(500).json({ message: 'Failed to save subscription', error: error.message });
   }
 };
 
