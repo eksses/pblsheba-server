@@ -1,5 +1,5 @@
 const webpush = require('web-push');
-const prisma = require('./prisma');
+const supabase = require('./supabase');
 
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT) {
   webpush.setVapidDetails(
@@ -13,11 +13,17 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env
 
 const sendPushNotification = async (userId, payload) => {
   try {
-    const subscriptions = await prisma.pushSubscription.findMany({
-      where: { userId }
-    });
+    const { data: subscriptions, error } = await supabase
+      .from('PushSubscription')
+      .select('*')
+      .eq('userId', userId);
 
-    if (subscriptions.length === 0) {
+    if (error) {
+      console.error('Failed to fetch subscriptions:', error.message);
+      return { sent: 0, failed: 0, cleaned: 0, error: error.message };
+    }
+
+    if (!subscriptions || subscriptions.length === 0) {
       console.log(`No push subscriptions found for user: ${userId}`);
       return { sent: 0, failed: 0, cleaned: 0 };
     }
@@ -27,43 +33,36 @@ const sendPushNotification = async (userId, payload) => {
     let failed = 0;
     let cleaned = 0;
 
-    const results = await Promise.allSettled(
-      subscriptions.map(async (sub) => {
-        const pushConfig = {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.p256dh,
-            auth: sub.auth
-          }
-        };
-
-        try {
-          await webpush.sendNotification(pushConfig, notificationPayload);
-          sent++;
-        } catch (error) {
-          if (error.statusCode === 410 || error.statusCode === 404) {
-            try {
-              await prisma.pushSubscription.delete({ where: { id: sub.id } });
-              cleaned++;
-            } catch (delErr) {
-              console.error(`Failed to clean stale subscription ${sub.id}:`, delErr.message);
-            }
-          } else if (error.statusCode === 429) {
-            // Rate limited — wait and retry once
-            await new Promise(r => setTimeout(r, 1000));
-            try {
-              await webpush.sendNotification(pushConfig, notificationPayload);
-              sent++;
-            } catch (retryErr) {
-              failed++;
-            }
-          } else {
-            failed++;
-            console.error(`Push failed for sub ${sub.id}:`, error.statusCode, error.body);
-          }
+    for (const sub of subscriptions) {
+      const pushConfig = {
+        endpoint: sub.endpoint,
+        keys: {
+          p256dh: sub.p256dh,
+          auth: sub.auth
         }
-      })
-    );
+      };
+
+      try {
+        await webpush.sendNotification(pushConfig, notificationPayload);
+        sent++;
+      } catch (err) {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          await supabase.from('PushSubscription').delete().eq('id', sub.id);
+          cleaned++;
+        } else if (err.statusCode === 429) {
+          await new Promise(r => setTimeout(r, 1000));
+          try {
+            await webpush.sendNotification(pushConfig, notificationPayload);
+            sent++;
+          } catch (retryErr) {
+            failed++;
+          }
+        } else {
+          failed++;
+          console.error(`Push failed for sub ${sub.id}:`, err.statusCode, err.body);
+        }
+      }
+    }
 
     console.log(`Push to user ${userId}: sent=${sent}, failed=${failed}, cleaned=${cleaned}`);
     return { sent, failed, cleaned };
@@ -75,11 +74,16 @@ const sendPushNotification = async (userId, payload) => {
 
 const sendRoleNotification = async (role, payload) => {
   try {
-    const where = role === 'all' ? {} : { role };
-    const users = await prisma.user.findMany({
-      where,
-      select: { id: true }
-    });
+    let query = supabase.from('User').select('id');
+    if (role !== 'all') {
+      query = query.eq('role', role);
+    }
+    const { data: users, error } = await query;
+
+    if (error) {
+      console.error('Failed to fetch users for broadcast:', error.message);
+      return { users: 0, sent: 0, failed: 0, cleaned: 0, error: error.message };
+    }
 
     let totalSent = 0;
     let totalFailed = 0;

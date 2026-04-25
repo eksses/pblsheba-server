@@ -1,4 +1,4 @@
-const prisma = require('../utils/prisma');
+const supabase = require('../utils/supabase');
 const { sendPushNotification, sendRoleNotification } = require('../utils/pushNotification');
 
 const subscribe = async (req, res) => {
@@ -16,34 +16,29 @@ const subscribe = async (req, res) => {
       return res.status(400).json({ message: 'Missing encryption keys (p256dh or auth)' });
     }
 
-    // Check if subscription already exists
-    const existing = await prisma.pushSubscription.findUnique({
-      where: { endpoint }
-    });
+    // Check if this endpoint already exists
+    const { data: existing } = await supabase
+      .from('PushSubscription')
+      .select('id')
+      .eq('endpoint', endpoint)
+      .single();
 
     if (existing) {
-      await prisma.pushSubscription.update({
-        where: { endpoint },
-        data: {
-          userId,
-          p256dh: keys.p256dh,
-          auth: keys.auth
-        }
-      });
+      const { error } = await supabase
+        .from('PushSubscription')
+        .update({ userId, p256dh: keys.p256dh, auth: keys.auth })
+        .eq('endpoint', endpoint);
+      if (error) throw error;
     } else {
-      await prisma.pushSubscription.create({
-        data: {
-          userId,
-          endpoint,
-          p256dh: keys.p256dh,
-          auth: keys.auth
-        }
-      });
+      const { error } = await supabase
+        .from('PushSubscription')
+        .insert({ userId, endpoint, p256dh: keys.p256dh, auth: keys.auth });
+      if (error) throw error;
     }
 
     res.status(201).json({ message: 'Subscription saved successfully' });
   } catch (error) {
-    console.error('Subscription error:', error.message, error.code, error.meta);
+    console.error('Subscription error:', error.message || error);
     res.status(500).json({ message: 'Failed to save subscription', error: error.message });
   }
 };
@@ -51,9 +46,11 @@ const subscribe = async (req, res) => {
 const unsubscribe = async (req, res) => {
   try {
     const { endpoint } = req.body;
-    await prisma.pushSubscription.deleteMany({
-      where: { endpoint }
-    });
+    const { error } = await supabase
+      .from('PushSubscription')
+      .delete()
+      .eq('endpoint', endpoint);
+    if (error) throw error;
     res.json({ message: 'Unsubscribed successfully' });
   } catch (error) {
     console.error('Unsubscribe error:', error.message);
@@ -72,37 +69,9 @@ const testPush = async (req, res) => {
       url: '/'
     });
 
-    res.json({
-      message: 'Test push sent',
-      delivery: result
-    });
+    res.json({ message: 'Test push sent', delivery: result });
   } catch (error) {
     console.error('Test push error:', error.message);
-    res.status(500).json({ message: error.message });
-  }
-};
-
-const mySubscriptions = async (req, res) => {
-  try {
-    const subscriptions = await prisma.pushSubscription.findMany({
-      where: { userId: req.user.id },
-      select: {
-        id: true,
-        endpoint: true,
-        createdAt: true
-      }
-    });
-
-    res.json({
-      count: subscriptions.length,
-      subscriptions: subscriptions.map(s => ({
-        id: s.id,
-        endpoint: s.endpoint.substring(0, 60) + '...',
-        createdAt: s.createdAt
-      }))
-    });
-  } catch (error) {
-    console.error('List subscriptions error:', error.message);
     res.status(500).json({ message: error.message });
   }
 };
@@ -131,21 +100,40 @@ const broadcast = async (req, res) => {
   }
 };
 
-const allSubscriptions = async (req, res) => {
+const mySubscriptions = async (req, res) => {
   try {
-    const subscriptions = await prisma.pushSubscription.findMany({
-      select: {
-        id: true,
-        userId: true,
-        endpoint: true,
-        createdAt: true
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const { data, error } = await supabase
+      .from('PushSubscription')
+      .select('id, endpoint, createdAt')
+      .eq('userId', req.user.id)
+      .order('createdAt', { ascending: false });
+    if (error) throw error;
 
     res.json({
-      count: subscriptions.length,
-      subscriptions: subscriptions.map(s => ({
+      count: data.length,
+      subscriptions: data.map(s => ({
+        id: s.id,
+        endpoint: s.endpoint.substring(0, 60) + '...',
+        createdAt: s.createdAt
+      }))
+    });
+  } catch (error) {
+    console.error('List subscriptions error:', error.message);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const allSubscriptions = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('PushSubscription')
+      .select('id, userId, endpoint, createdAt')
+      .order('createdAt', { ascending: false });
+    if (error) throw error;
+
+    res.json({
+      count: data.length,
+      subscriptions: data.map(s => ({
         id: s.id,
         userId: s.userId,
         endpoint: s.endpoint.substring(0, 60) + '...',
