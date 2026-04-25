@@ -19,25 +19,17 @@ const subscribe = async (req, res) => {
       return res.status(400).json({ message: 'Missing encryption keys (p256dh or auth)' });
     }
 
-    // Check if this endpoint already exists
-    const { data: existing } = await supabase
+    // Clean up: remove ALL old subscriptions for this user (prevents duplicates)
+    await supabase
       .from('PushSubscription')
-      .select('id')
-      .eq('endpoint', endpoint)
-      .single();
+      .delete()
+      .eq('userId', userId);
 
-    if (existing) {
-      const { error } = await supabase
-        .from('PushSubscription')
-        .update({ userId, p256dh: keys.p256dh, auth: keys.auth })
-        .eq('endpoint', endpoint);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from('PushSubscription')
-        .insert({ id: generateId(), userId, endpoint, p256dh: keys.p256dh, auth: keys.auth });
-      if (error) throw error;
-    }
+    // Insert fresh subscription
+    const { error } = await supabase
+      .from('PushSubscription')
+      .insert({ id: generateId(), userId, endpoint, p256dh: keys.p256dh, auth: keys.auth });
+    if (error) throw error;
 
     res.status(201).json({ message: 'Subscription saved successfully' });
   } catch (error) {
