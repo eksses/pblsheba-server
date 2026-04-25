@@ -19,6 +19,8 @@ app.use(express.json());
 
 
 
+app.get('/api/ping', (req, res) => res.send('pong'));
+
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const adminRoutes = require('./routes/adminRoutes');

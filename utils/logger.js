@@ -8,25 +8,23 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   transports: [
-    // Write all logs with importance level of `error` or less to `error.log`
-    new winston.transports.File({ 
-      filename: path.join(__dirname, '../logs/error.log'), 
-      level: 'error' 
-    }),
-    // Write all logs with importance level of `info` or less to `combined.log`
-    new winston.transports.File({ 
-      filename: path.join(__dirname, '../logs/combined.log') 
-    }),
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      ),
+    })
   ],
 });
 
-// If we're not in production then log to the `console`
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    ),
+// Only add file transports if not on Vercel/Production
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  logger.add(new winston.transports.File({ 
+    filename: path.join(__dirname, '../logs/error.log'), 
+    level: 'error' 
+  }));
+  logger.add(new winston.transports.File({ 
+    filename: path.join(__dirname, '../logs/combined.log') 
   }));
 }
 
