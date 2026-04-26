@@ -48,16 +48,19 @@ const getSettings = async (req, res) => {
 
 const updateSettings = async (req, res) => {
   try {
-    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
+    const { data: current } = await supabase.from('Setting').select('*').eq('id', 1).maybeSingle();
+    
+    const dbSmsKey = current ? Object.keys(current).find(k => k.toLowerCase() === 'smswebhookkey' || k.toLowerCase() === 'sms_webhook_key') : 'smsWebhookKey';
+    const dbUpdateKey = current ? Object.keys(current).find(k => k.toLowerCase() === 'updatedat' || k.toLowerCase() === 'updated_at') : 'updatedAt';
 
     const updateData = {};
     if (req.body.registrationFee !== undefined) updateData.registrationFee = parseInt(req.body.registrationFee);
     if (req.body.paymentMethods) updateData.paymentMethods = JSON.parse(JSON.stringify(req.body.paymentMethods));
     if (req.body.employeeCanViewAll !== undefined) updateData.employeeCanViewAll = Boolean(req.body.employeeCanViewAll);
     if (req.body.jobApplicationsEnabled !== undefined) updateData.jobApplicationsEnabled = Boolean(req.body.jobApplicationsEnabled);
-    if (req.body.smsWebhookKey !== undefined) updateData.smsWebhookKey = req.body.smsWebhookKey;
+    if (req.body.smsWebhookKey !== undefined) updateData[dbSmsKey || 'smsWebhookKey'] = req.body.smsWebhookKey;
     
-    updateData.updatedAt = new Date().toISOString();
+    updateData[dbUpdateKey || 'updatedAt'] = new Date().toISOString();
 
     const { data: updated, error } = await supabase
       .from('Setting')
@@ -109,13 +112,21 @@ const regenerateSmsApiKey = async (req, res) => {
       if (createError) throw createError;
       settings = created;
     } else {
-      // 2. Perform update
+      // 2. Perform update with schema awareness
+      const updatePayload = { updatedAt: new Date().toISOString() };
+      
+      // Determine correct column name from fetched settings
+      const dbSmsKey = Object.keys(settings).find(k => k.toLowerCase() === 'smswebhookkey' || k.toLowerCase() === 'sms_webhook_key');
+      const dbUpdateKey = Object.keys(settings).find(k => k.toLowerCase() === 'updatedat' || k.toLowerCase() === 'updated_at');
+      
+      if (dbSmsKey) updatePayload[dbSmsKey] = newKey;
+      else updatePayload.smsWebhookKey = newKey; // Fallback
+      
+      if (dbUpdateKey) updatePayload[dbUpdateKey] = new Date().toISOString();
+
       const { data: updated, error: updateError } = await supabase
         .from('Setting')
-        .update({ 
-          smsWebhookKey: newKey, 
-          updatedAt: new Date().toISOString() 
-        })
+        .update(updatePayload)
         .eq('id', 1)
         .select()
         .single();
