@@ -34,6 +34,12 @@ const sendPushNotification = async (userId, payload) => {
       body: payload.body || payload.message || 'You have a new notification',
       data: {
         url: payload.url || '/'
+      },
+      // Nested object for Apple/FCM compatibility
+      notification: {
+        title: payload.title || 'PBL Sheba',
+        body: payload.body || payload.message || 'You have a new notification',
+        icon: '/logo.png'
       }
     };
     
@@ -53,10 +59,16 @@ const sendPushNotification = async (userId, payload) => {
       };
 
       try {
-        await webpush.sendNotification(pushConfig, notificationPayload, {
+        const response = await webpush.sendNotification(pushConfig, notificationPayload, {
           urgency: 'high',
-          topic: 'pblsheba' // Optional but sometimes helpful for APNs
+          TTL: 0 // Attempt immediate delivery
         });
+        
+        console.log(`[Push] Success for sub ${sub.id}:`, {
+          statusCode: response.statusCode,
+          headers: response.headers
+        });
+
         sent++;
         sentEndpoints.push(sub.endpoint.substring(0, 20) + '...');
       } catch (err) {
