@@ -59,7 +59,7 @@ const subscribe = async (req, res) => {
     if (error) throw error;
 
     // Send welcome notification for first-time activation only
-    if (isNew) {
+    if (isNew && req.body.welcome) {
       setTimeout(async () => {
         try {
           await sendPushNotification(userId, {

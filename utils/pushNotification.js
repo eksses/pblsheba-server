@@ -48,7 +48,7 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
     let cleaned = 0;
     const sentEndpoints = [];
 
-    for (const sub of subscriptions) {
+    const pushPromises = subscriptions.map(async (sub) => {
       const pushConfig = {
         endpoint: sub.endpoint,
         keys: {
@@ -57,46 +57,54 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
         }
       };
 
-      try {
-        const options = {
-          urgency: 'high',
-          TTL: 0
+      const options = {
+        urgency: 'high',
+        TTL: 0
+      };
+
+      if (sub.endpoint.includes('apple.com')) {
+        options.vapidDetails = {
+          subject: customSubject || process.env.VAPID_SUBJECT || 'https://pblsheba-admin.vercel.app',
+          publicKey: process.env.VAPID_PUBLIC_KEY,
+          privateKey: process.env.VAPID_PRIVATE_KEY
         };
+      }
 
-        // Apple is extremely picky about VAPID subjects. 
-        // If it's an Apple endpoint, we ensure the subject is an HTTPS URL.
-        if (sub.endpoint.includes('apple.com')) {
-          options.vapidDetails = {
-            subject: customSubject || process.env.VAPID_SUBJECT || 'https://pblsheba-admin.vercel.app',
-            publicKey: process.env.VAPID_PUBLIC_KEY,
-            privateKey: process.env.VAPID_PRIVATE_KEY
-          };
-        }
-
-        const response = await webpush.sendNotification(pushConfig, notificationPayload, options);
-        
-        // Success logging removed for production unless debug needed
-        sent++;
-        sentEndpoints.push(sub.endpoint.substring(0, 20) + '...');
+      try {
+        await webpush.sendNotification(pushConfig, notificationPayload, options);
+        return { type: 'sent', endpoint: sub.endpoint };
       } catch (err) {
         if (err.statusCode === 410 || err.statusCode === 404) {
           await supabase.from('PushSubscription').delete().eq('id', sub.id);
-          cleaned++;
+          return { type: 'cleaned' };
         } else if (err.statusCode === 429) {
-          // Silent retry for rate limiting
           await new Promise(r => setTimeout(r, 1000));
           try {
-            await webpush.sendNotification(pushConfig, notificationPayload);
-            sent++;
+            // FIX: Pass options on retry
+            await webpush.sendNotification(pushConfig, notificationPayload, options);
+            return { type: 'sent', endpoint: sub.endpoint };
           } catch (retryErr) {
-            failed++;
+            return { type: 'failed' };
           }
         } else {
-          failed++;
           console.error(`Push failed for sub ${sub.id}:`, err.statusCode);
+          return { type: 'failed' };
         }
       }
-    }
+    });
+
+    const results = await Promise.all(pushPromises);
+    
+    results.forEach(res => {
+      if (res.type === 'sent') {
+        sent++;
+        sentEndpoints.push(res.endpoint.substring(0, 20) + '...');
+      } else if (res.type === 'failed') {
+        failed++;
+      } else if (res.type === 'cleaned') {
+        cleaned++;
+      }
+    });
 
     return { sent, failed, cleaned, endpoints: sentEndpoints };
   } catch (error) {
@@ -122,15 +130,19 @@ const sendRoleNotification = async (role, payload, customSubject = null) => {
       return { users: 0, sent: 0, failed: 0, cleaned: 0 };
     }
 
-    let totalSent = 0;
-    let totalFailed = 0;
-    let totalCleaned = 0;
-
-    for (const user of users) {
-      const result = await sendPushNotification(user.id, payload, customSubject);
-      totalSent += result.sent;
-      totalFailed += result.failed;
-      totalCleaned += result.cleaned;
+    // Use chunked parallel processing to avoid overwhelming the event loop or database connections
+    const CHUNK_SIZE = 25;
+    for (let i = 0; i < users.length; i += CHUNK_SIZE) {
+      const chunk = users.slice(i, i + CHUNK_SIZE);
+      const results = await Promise.all(
+        chunk.map(user => sendPushNotification(user.id, payload, customSubject))
+      );
+      
+      results.forEach(result => {
+        totalSent += result.sent;
+        totalFailed += result.failed;
+        totalCleaned += result.cleaned;
+      });
     }
 
     return { users: users.length, sent: totalSent, failed: totalFailed, cleaned: totalCleaned };
