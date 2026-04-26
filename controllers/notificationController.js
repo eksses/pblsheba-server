@@ -66,7 +66,7 @@ const subscribe = async (req, res) => {
             title: 'PBL Sheba',
             body: 'Welcome! Push notifications are now enabled on this device.',
             url: '/'
-          });
+          }, req.headers.origin);
         } catch (err) {
           console.error('Welcome notification failed:', err);
         }
@@ -104,7 +104,7 @@ const testPush = async (req, res) => {
       title: title || 'PBL Sheba Test',
       body: body || 'Push notification is working!',
       url: '/'
-    });
+    }, req.headers.origin);
 
     res.json({ message: 'Test push sent', delivery: result });
   } catch (error) {
@@ -123,9 +123,9 @@ const broadcast = async (req, res) => {
 
     let result;
     if (userId) {
-      result = await sendPushNotification(userId, { title, body, url: url || '/' });
+      result = await sendPushNotification(userId, { title, body, url: url || '/' }, req.headers.origin);
     } else if (role) {
-      result = await sendRoleNotification(role, { title, body, url: url || '/' });
+      result = await sendRoleNotification(role, { title, body, url: url || '/' }, req.headers.origin);
     } else {
       return res.status(400).json({ message: 'Provide either userId or role' });
     }

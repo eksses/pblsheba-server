@@ -11,7 +11,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env
   console.warn('PUSH NOTIFICATIONS DISABLED: VAPID keys missing in environment variables.');
 }
 
-const sendPushNotification = async (userId, payload) => {
+const sendPushNotification = async (userId, payload, customSubject = null) => {
   try {
     const { data: subscriptions, error } = await supabase
       .from('PushSubscription')
@@ -65,10 +65,10 @@ const sendPushNotification = async (userId, payload) => {
         };
 
         // Apple is extremely picky about VAPID subjects. 
-        // If it's an Apple endpoint, we ensure the subject is an HTTPS URL if possible.
+        // If it's an Apple endpoint, we ensure the subject is an HTTPS URL.
         if (sub.endpoint.includes('apple.com')) {
           options.vapidDetails = {
-            subject: 'https://pblsheba-admin.vercel.app',
+            subject: customSubject || process.env.VAPID_SUBJECT || 'https://pblsheba-admin.vercel.app',
             publicKey: process.env.VAPID_PUBLIC_KEY,
             privateKey: process.env.VAPID_PRIVATE_KEY
           };
@@ -133,7 +133,7 @@ const sendRoleNotification = async (role, payload) => {
     let totalCleaned = 0;
 
     for (const user of users) {
-      const result = await sendPushNotification(user.id, payload);
+      const result = await sendPushNotification(user.id, payload, customSubject);
       totalSent += result.sent;
       totalFailed += result.failed;
       totalCleaned += result.cleaned;
