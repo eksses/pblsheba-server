@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const supabase = require('../../utils/supabase');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
+const logger = require('../../utils/logger');
 
 /**
  * Settings Controller
@@ -88,13 +89,17 @@ const regenerateSmsApiKey = async (req, res) => {
 
     const newKey = crypto.randomBytes(24).toString('hex');
 
+    // 1. Fetch current settings to ensure we don't break NOT NULL constraints
+    const { data: existing } = await supabase.from('Setting').select('*').eq('id', 1).single();
+    
+    // 2. Perform update
     const { data: updated, error } = await supabase
       .from('Setting')
-      .upsert({ 
-        id: 1, 
+      .update({ 
         smsWebhookKey: newKey, 
         updatedAt: new Date().toISOString() 
-      }, { onConflict: 'id' })
+      })
+      .eq('id', 1)
       .select()
       .single();
 
@@ -111,7 +116,11 @@ const regenerateSmsApiKey = async (req, res) => {
 
     res.json({ key: newKey });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    logger.error('SMS Key Regeneration Failed:', error);
+    res.status(500).json({ 
+      message: error.message || 'Internal server error',
+      details: error.details || null
+    });
   }
 };
 
