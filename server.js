@@ -1,9 +1,8 @@
-const express = require('express');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db');
-
-
 dotenv.config();
+
+const express = require('express');
+const connectDB = require('./config/db');
 
 const mongoose = require('mongoose');
 // Disable command buffering to prevent hanging if DB is not connected

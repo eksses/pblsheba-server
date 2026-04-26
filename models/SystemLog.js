@@ -10,8 +10,10 @@ class SystemLog {
         id: require('crypto').randomUUID(),
         level: level || 'info',
         message,
-        metadata: { ...parsedMetadata, action: action || null, ip: ip || null },
+        metadata: parsedMetadata,
         userId: userId || null,
+        action: action || null,
+        ip: ip || null,
         createdAt: now
       };
 

@@ -46,6 +46,7 @@ const getHealth = async (req, res) => {
       });
     }
   } catch (err) {
+    console.error('Health check partial failure:', err.message);
     if (!isDebug) return res.status(200).json({ status: 'partially_degraded', timestamp, services });
   }
 
