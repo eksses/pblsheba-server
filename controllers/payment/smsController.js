@@ -16,8 +16,8 @@ const receiveSms = async (req, res) => {
     // 1. Authenticate Request via DB Settings
     let settings = await CacheService.get('system_settings');
     if (!settings) {
-      const { data } = await supabase.from('Setting').select('*').eq('id', 1).single();
-      settings = data;
+      const Settings = require('../../models/Settings');
+      settings = await Settings.findOne();
     }
 
     if (apiKey !== settings?.smsWebhookKey) {

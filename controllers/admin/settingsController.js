@@ -8,38 +8,50 @@ const logger = require('../../utils/logger');
  * Settings Controller
  * Handles system-wide configuration and metadata.
  */
+const Settings = require('../../models/Settings');
+
+/**
+ * Settings Controller
+ * Handles system-wide configuration and metadata using MongoDB.
+ */
 const getSettings = async (req, res) => {
   try {
-    const { data: settings, error } = await supabase.from('Setting').select('*').eq('id', 1).maybeSingle();
-
-    if (error && error.code !== 'PGRST116') throw error;
+    const cacheKey = 'system_settings';
+    let settings = await CacheService.get(cacheKey);
 
     if (!settings) {
-      const defaultSettings = {
-        id: 1,
-        registrationFee: 365,
-        paymentMethods: [
-          { name: 'Bkash', number: '01XXXXXXXXX', type: 'Personal' },
-          { name: 'Nagad', number: '01XXXXXXXXX', type: 'Personal' }
-        ],
-        employeeCanViewAll: false,
-        jobApplicationsEnabled: true,
-        smsWebhookKey: Array.from({length: 48}, () => Math.floor(Math.random() * 16).toString(16)).join(''),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+      // 1. Try to find in MongoDB
+      settings = await Settings.findOne();
 
-      const { data: newSettings, error: initError } = await supabase
-        .from('Setting')
-        .insert([defaultSettings])
-        .select()
-        .single();
-
-      if (initError) throw initError;
-      return res.json({ ...newSettings, _id: newSettings.id });
+      // 2. Fallback/Migration: If not in Mongo, check Supabase
+      if (!settings) {
+        const { data: sbSettings } = await supabase.from('Setting').select('*').eq('id', 1).maybeSingle();
+        
+        if (sbSettings) {
+          // Migrate Supabase data to MongoDB
+          settings = await Settings.create({
+            registrationFee: sbSettings.registrationFee,
+            jobApplicationsEnabled: sbSettings.jobApplicationsEnabled,
+            employeeCanViewAll: sbSettings.employeeCanViewAll,
+            paymentMethods: sbSettings.paymentMethods,
+            smsWebhookKey: sbSettings.smsWebhookKey || Array.from({length: 48}, () => Math.floor(Math.random() * 16).toString(16)).join('')
+          });
+          logger.info('Migrated settings from Supabase to MongoDB');
+        } else {
+          // Initialize fresh in MongoDB
+          settings = await Settings.create({
+            registrationFee: 365,
+            employeeCanViewAll: false,
+            jobApplicationsEnabled: true
+          });
+          logger.info('Initialized default settings in MongoDB');
+        }
+      }
+      
+      await CacheService.set(cacheKey, settings, 3600);
     }
 
-    res.json({ ...settings, _id: settings.id });
+    res.json({ ...settings.toObject(), _id: settings._id, id: 1 });
   } catch (error) {
     logger.error('Failed to get settings:', error);
     res.status(500).json({ message: error.message });
@@ -48,41 +60,30 @@ const getSettings = async (req, res) => {
 
 const updateSettings = async (req, res) => {
   try {
-    const { data: current } = await supabase.from('Setting').select('*').eq('id', 1).maybeSingle();
+    if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
+
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+
+    if (req.body.registrationFee !== undefined) settings.registrationFee = parseInt(req.body.registrationFee);
+    if (req.body.paymentMethods) settings.paymentMethods = req.body.paymentMethods;
+    if (req.body.employeeCanViewAll !== undefined) settings.employeeCanViewAll = Boolean(req.body.employeeCanViewAll);
+    if (req.body.jobApplicationsEnabled !== undefined) settings.jobApplicationsEnabled = Boolean(req.body.jobApplicationsEnabled);
+    if (req.body.smsWebhookKey !== undefined) settings.smsWebhookKey = req.body.smsWebhookKey;
     
-    const dbSmsKey = current ? Object.keys(current).find(k => k.toLowerCase() === 'smswebhookkey' || k.toLowerCase() === 'sms_webhook_key') : 'smsWebhookKey';
-    const dbUpdateKey = current ? Object.keys(current).find(k => k.toLowerCase() === 'updatedat' || k.toLowerCase() === 'updated_at') : 'updatedAt';
-
-    const updateData = {};
-    if (req.body.registrationFee !== undefined) updateData.registrationFee = parseInt(req.body.registrationFee);
-    if (req.body.paymentMethods) updateData.paymentMethods = JSON.parse(JSON.stringify(req.body.paymentMethods));
-    if (req.body.employeeCanViewAll !== undefined) updateData.employeeCanViewAll = Boolean(req.body.employeeCanViewAll);
-    if (req.body.jobApplicationsEnabled !== undefined) updateData.jobApplicationsEnabled = Boolean(req.body.jobApplicationsEnabled);
-    if (req.body.smsWebhookKey !== undefined) updateData[dbSmsKey || 'smsWebhookKey'] = req.body.smsWebhookKey;
-    
-    updateData[dbUpdateKey || 'updatedAt'] = new Date().toISOString();
-
-    const { data: updated, error } = await supabase
-      .from('Setting')
-      .update(updateData)
-      .eq('id', 1)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Invalidate caches
+    await settings.save();
     await CacheService.invalidateSettings();
 
     await LogService.info(
       `System settings updated by admin`,
       'ADMIN_UPDATE_SETTINGS',
       null,
-      { adminId: req.user.id, updates: updateData }
+      { adminId: req.user.id }
     );
 
-    res.json({ ...updated, _id: updated.id });
+    res.json({ ...settings.toObject(), _id: settings._id, id: 1 });
   } catch (error) {
+    logger.error('Failed to update settings:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -93,48 +94,12 @@ const regenerateSmsApiKey = async (req, res) => {
 
     const newKey = Array.from({length: 48}, () => Math.floor(Math.random() * 16).toString(16)).join('');
 
-    // 1. Ensure settings exist and get existing data
-    let { data: settings, error: fetchError } = await supabase.from('Setting').select('*').eq('id', 1).maybeSingle();
+    let settings = await Settings.findOne();
+    if (!settings) settings = new Settings();
+
+    settings.smsWebhookKey = newKey;
+    await settings.save();
     
-    if (!settings) {
-      // Bootstrap if missing (emergency fallback)
-      const bootstrap = {
-        id: 1,
-        registrationFee: 365,
-        paymentMethods: [{ name: 'Bkash', number: '01XXXXXXXXX', type: 'Personal' }],
-        employeeCanViewAll: false,
-        jobApplicationsEnabled: true,
-        smsWebhookKey: newKey,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      const { data: created, error: createError } = await supabase.from('Setting').insert([bootstrap]).select().single();
-      if (createError) throw createError;
-      settings = created;
-    } else {
-      // 2. Perform update with schema awareness
-      const updatePayload = { updatedAt: new Date().toISOString() };
-      
-      // Determine correct column name from fetched settings
-      const dbSmsKey = Object.keys(settings).find(k => k.toLowerCase() === 'smswebhookkey' || k.toLowerCase() === 'sms_webhook_key');
-      const dbUpdateKey = Object.keys(settings).find(k => k.toLowerCase() === 'updatedat' || k.toLowerCase() === 'updated_at');
-      
-      if (dbSmsKey) updatePayload[dbSmsKey] = newKey;
-      else updatePayload.smsWebhookKey = newKey; // Fallback
-      
-      if (dbUpdateKey) updatePayload[dbUpdateKey] = new Date().toISOString();
-
-      const { data: updated, error: updateError } = await supabase
-        .from('Setting')
-        .update(updatePayload)
-        .eq('id', 1)
-        .select()
-        .single();
-
-      if (updateError) throw updateError;
-      settings = updated;
-    }
-
     await CacheService.invalidateSettings();
 
     LogService.info(
@@ -148,8 +113,7 @@ const regenerateSmsApiKey = async (req, res) => {
   } catch (error) {
     logger.error('SMS Key Regeneration Failed:', error);
     res.status(500).json({ 
-      message: error.message || 'Internal server error',
-      details: error.details || null
+      message: error.message || 'Internal server error'
     });
   }
 };

@@ -13,11 +13,12 @@ const settingsSchema = new mongoose.Schema({
       logoUrl: { type: String }
     }], 
     default: [
-      { name: 'bKash', number: '01700000000', instructions: 'Send money to this bKash personal number and enter the TrxID below.', isActive: true, themeColor: '#E2136E', logoUrl: 'https:
-      { name: 'Nagad', number: '01700000000', instructions: 'Send money to this Nagad personal number and enter the TrxID below.', isActive: true, themeColor: '#F7931E', logoUrl: 'https:
+      { name: 'bKash', number: '01700000000', instructions: 'Send money to this bKash personal number and enter the TrxID below.', isActive: true, themeColor: '#E2136E', logoUrl: '' },
+      { name: 'Nagad', number: '01700000000', instructions: 'Send money to this Nagad personal number and enter the TrxID below.', isActive: true, themeColor: '#F7931E', logoUrl: '' }
     ]
   },
-  employeeCanViewAll: { type: Boolean, default: false }
+  employeeCanViewAll: { type: Boolean, default: false },
+  smsWebhookKey: { type: String, default: () => require('crypto').randomBytes(24).toString('hex') }
 }, { timestamps: true });
 
 const Settings = mongoose.model('Settings', settingsSchema);
