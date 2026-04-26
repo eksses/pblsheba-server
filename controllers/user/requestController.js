@@ -1,6 +1,8 @@
 const supabase = require('../../utils/supabase');
 const LogService = require('../../services/logService');
 
+const { sendRoleNotification } = require('../../utils/pushNotification');
+
 /**
  * Request Controller
  * Handles user inquiries and administrative requests (e.g., edit requests).
@@ -29,6 +31,12 @@ const requestEdit = async (req, res) => {
       updatedUser.id,
       { requestedChanges }
     );
+
+    await sendRoleNotification('owner', {
+      title: 'Profile Edit Request',
+      body: `${updatedUser.name} has requested profile changes.`,
+      url: '/approvals?tab=edits'
+    }, req.headers.origin);
 
     res.json({ message: 'Edit request submitted' });
   } catch (error) {

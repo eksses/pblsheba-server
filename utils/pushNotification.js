@@ -24,7 +24,6 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
     }
 
     if (!subscriptions || subscriptions.length === 0) {
-      console.log(`No push subscriptions found for user: ${userId}`);
       return { sent: 0, failed: 0, cleaned: 0 };
     }
 
@@ -76,23 +75,15 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
 
         const response = await webpush.sendNotification(pushConfig, notificationPayload, options);
         
-        console.log(`[Push] Success for sub ${sub.id}:`, {
-          statusCode: response.statusCode,
-          headers: response.headers
-        });
-
+        // Success logging removed for production unless debug needed
         sent++;
         sentEndpoints.push(sub.endpoint.substring(0, 20) + '...');
       } catch (err) {
-        console.warn(`[Push] Error for sub ${sub.id}:`, {
-          statusCode: err.statusCode,
-          body: err.body,
-          endpoint: sub.endpoint.substring(0, 30) + '...'
-        });
         if (err.statusCode === 410 || err.statusCode === 404) {
           await supabase.from('PushSubscription').delete().eq('id', sub.id);
           cleaned++;
         } else if (err.statusCode === 429) {
+          // Silent retry for rate limiting
           await new Promise(r => setTimeout(r, 1000));
           try {
             await webpush.sendNotification(pushConfig, notificationPayload);
@@ -102,12 +93,11 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
           }
         } else {
           failed++;
-          console.error(`Push failed for sub ${sub.id}:`, err.statusCode, err.body);
+          console.error(`Push failed for sub ${sub.id}:`, err.statusCode);
         }
       }
     }
 
-    console.log(`Push to user ${userId}: sent=${sent}, failed=${failed}, cleaned=${cleaned}`);
     return { sent, failed, cleaned, endpoints: sentEndpoints };
   } catch (error) {
     console.error(`Error sending push notification to user ${userId}:`, error.message);
@@ -115,10 +105,10 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
   }
 };
 
-const sendRoleNotification = async (role, payload) => {
+const sendRoleNotification = async (role, payload, customSubject = null) => {
   try {
     let query = supabase.from('User').select('id');
-    if (role !== 'all') {
+    if (role && role !== 'all') {
       query = query.eq('role', role);
     }
     const { data: users, error } = await query;
@@ -126,6 +116,10 @@ const sendRoleNotification = async (role, payload) => {
     if (error) {
       console.error('Failed to fetch users for broadcast:', error.message);
       return { users: 0, sent: 0, failed: 0, cleaned: 0, error: error.message };
+    }
+
+    if (!users || users.length === 0) {
+      return { users: 0, sent: 0, failed: 0, cleaned: 0 };
     }
 
     let totalSent = 0;
@@ -139,7 +133,6 @@ const sendRoleNotification = async (role, payload) => {
       totalCleaned += result.cleaned;
     }
 
-    console.log(`Role broadcast (${role}): ${users.length} users, sent=${totalSent}, failed=${totalFailed}`);
     return { users: users.length, sent: totalSent, failed: totalFailed, cleaned: totalCleaned };
   } catch (error) {
     console.error(`Error sending role notification to ${role}:`, error.message);

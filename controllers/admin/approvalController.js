@@ -56,6 +56,15 @@ const approveUser = async (req, res) => {
       });
     }
 
+    // Notify Referring Staff (if exists)
+    if (updatedUser.referredById) {
+      await sendPushNotification(updatedUser.referredById, {
+        title: `Registration ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        body: `The registration for ${updatedUser.name} has been ${status} by Admin.`,
+        url: '/employees/registrations'
+      }, req.headers.origin);
+    }
+
     // Invalidate metrics
     await CacheService.invalidateMetrics(req.user.id, req.user.role, updatedUser.referredById);
     // Also clear pending list cache
@@ -129,6 +138,12 @@ const dismissEditRequest = async (req, res) => {
       updatedUser.id,
       { adminId: req.user.id }
     );
+
+    await sendPushNotification(updatedUser.id, {
+      title: 'Profile Update',
+      body: 'Your profile information has been updated by the admin.',
+      url: '/profile'
+    }, req.headers.origin);
 
     res.json({ message: 'Edit request dismissed', user: { ...updatedUser, _id: updatedUser.id } });
   } catch (error) {

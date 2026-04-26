@@ -7,9 +7,20 @@ const { redis } = require('../../utils/redis');
  * Provides system status Monitoring for external health checks and administrative oversight.
  */
 const getHealth = async (req, res) => {
+  const isDebug = req.query.debug === 'true';
+  const timestamp = new Date().toISOString();
+
+  if (!isDebug) {
+    return res.status(200).json({ 
+      status: 'ok', 
+      timestamp,
+      message: 'System is operational'
+    });
+  }
+
   const healthInfo = {
     status: 'ok',
-    timestamp: new Date().toISOString(),
+    timestamp: timestamp,
     uptime: process.uptime(),
     platform: process.platform,
     version: process.version,
