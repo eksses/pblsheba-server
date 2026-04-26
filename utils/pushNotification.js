@@ -59,10 +59,22 @@ const sendPushNotification = async (userId, payload) => {
       };
 
       try {
-        const response = await webpush.sendNotification(pushConfig, notificationPayload, {
+        const options = {
           urgency: 'high',
-          TTL: 0 // Attempt immediate delivery
-        });
+          TTL: 0
+        };
+
+        // Apple is extremely picky about VAPID subjects. 
+        // If it's an Apple endpoint, we ensure the subject is an HTTPS URL if possible.
+        if (sub.endpoint.includes('apple.com')) {
+          options.vapidDetails = {
+            subject: 'https://pblsheba-admin.vercel.app',
+            publicKey: process.env.VAPID_PUBLIC_KEY,
+            privateKey: process.env.VAPID_PRIVATE_KEY
+          };
+        }
+
+        const response = await webpush.sendNotification(pushConfig, notificationPayload, options);
         
         console.log(`[Push] Success for sub ${sub.id}:`, {
           statusCode: response.statusCode,
