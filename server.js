@@ -15,7 +15,6 @@ connectDB().catch(err => console.error('Initial DB connect failed:', err.message
 
 const app = express();
 
-
 app.use(express.json());
 
 
