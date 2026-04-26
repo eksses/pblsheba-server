@@ -13,10 +13,10 @@ const getSettings = async (req, res) => {
     let settings = await CacheService.get(cacheKey);
 
     if (!settings) {
-      const { data } = await supabase.from('Setting').select('*').eq('id', 1).single();
+      const { data, error: fetchError } = await supabase.from('Setting').select('*').eq('id', 1).single();
       settings = data;
 
-      if (!settings) {
+      if (!settings || fetchError) {
         // Initialize default settings if missing
         const { data: newSettings } = await supabase
           .from('Setting')
@@ -90,8 +90,11 @@ const regenerateSmsApiKey = async (req, res) => {
 
     const { data: updated, error } = await supabase
       .from('Setting')
-      .update({ smsWebhookKey: newKey, updatedAt: new Date().toISOString() })
-      .eq('id', 1)
+      .upsert({ 
+        id: 1, 
+        smsWebhookKey: newKey, 
+        updatedAt: new Date().toISOString() 
+      }, { onConflict: 'id' })
       .select()
       .single();
 

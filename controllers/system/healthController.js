@@ -10,12 +10,43 @@ const getHealth = async (req, res) => {
   const isDebug = req.query.debug === 'true';
   const timestamp = new Date().toISOString();
 
-  if (!isDebug) {
-    return res.status(200).json({ 
-      status: 'ok', 
-      timestamp,
-      message: 'System is operational'
-    });
+  // Basic connectivity check for the dashboard (minimal overhead)
+  const services = {
+    supabase: { status: 'checking' },
+    mongodb: { status: 'checking' },
+    redis: { status: 'checking' }
+  };
+
+  try {
+    // 1. Supabase check
+    const { error: sError } = await supabase.from('Setting').select('id').limit(1);
+    services.supabase.status = sError ? 'error' : 'connected';
+
+    // 2. MongoDB check
+    const dbState = mongoose.connection.readyState;
+    services.mongodb.status = ['disconnected', 'connected', 'connecting', 'disconnecting'][dbState] || 'unknown';
+
+    // 3. Redis check
+    if (redis && typeof redis.ping === 'function') {
+      try {
+        const ping = await redis.ping();
+        services.redis.status = ping === 'PONG' ? 'connected' : 'error';
+      } catch (e) {
+        services.redis.status = 'error';
+      }
+    } else {
+      services.redis.status = 'not_configured';
+    }
+
+    if (!isDebug) {
+      return res.status(200).json({ 
+        status: 'ok', 
+        timestamp,
+        services
+      });
+    }
+  } catch (err) {
+    if (!isDebug) return res.status(200).json({ status: 'partially_degraded', timestamp, services });
   }
 
   const healthInfo = {
