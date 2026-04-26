@@ -183,11 +183,27 @@ const allSubscriptions = async (req, res) => {
   }
 };
 
+const clearAllSubscriptions = async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('PushSubscription')
+      .delete()
+      .neq('id', 'placeholder'); // Delete everything
+    
+    if (error) throw error;
+    res.json({ message: 'All subscriptions cleared successfully' });
+  } catch (error) {
+    console.error('Clear all subscriptions error:', error.message);
+    res.status(500).json({ message: 'Failed to clear subscriptions' });
+  }
+};
+
 module.exports = {
   subscribe,
   unsubscribe,
   testPush,
   broadcast,
   mySubscriptions,
-  allSubscriptions
+  allSubscriptions,
+  clearAllSubscriptions
 };

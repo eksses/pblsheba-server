@@ -9,5 +9,6 @@ router.post('/test-push', protect, admin, notificationController.testPush);
 router.post('/broadcast', protect, owner, notificationController.broadcast);
 router.get('/my-subscriptions', protect, notificationController.mySubscriptions);
 router.get('/all-subscriptions', protect, owner, notificationController.allSubscriptions);
+router.delete('/clear-all', protect, owner, notificationController.clearAllSubscriptions);
 
 module.exports = router;
