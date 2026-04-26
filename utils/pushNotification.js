@@ -41,6 +41,7 @@ const sendPushNotification = async (userId, payload) => {
     let sent = 0;
     let failed = 0;
     let cleaned = 0;
+    const sentEndpoints = [];
 
     for (const sub of subscriptions) {
       const pushConfig = {
@@ -52,9 +53,18 @@ const sendPushNotification = async (userId, payload) => {
       };
 
       try {
-        await webpush.sendNotification(pushConfig, notificationPayload);
+        await webpush.sendNotification(pushConfig, notificationPayload, {
+          urgency: 'high',
+          topic: 'pblsheba' // Optional but sometimes helpful for APNs
+        });
         sent++;
+        sentEndpoints.push(sub.endpoint.substring(0, 20) + '...');
       } catch (err) {
+        console.warn(`[Push] Error for sub ${sub.id}:`, {
+          statusCode: err.statusCode,
+          body: err.body,
+          endpoint: sub.endpoint.substring(0, 30) + '...'
+        });
         if (err.statusCode === 410 || err.statusCode === 404) {
           await supabase.from('PushSubscription').delete().eq('id', sub.id);
           cleaned++;
@@ -74,7 +84,7 @@ const sendPushNotification = async (userId, payload) => {
     }
 
     console.log(`Push to user ${userId}: sent=${sent}, failed=${failed}, cleaned=${cleaned}`);
-    return { sent, failed, cleaned };
+    return { sent, failed, cleaned, endpoints: sentEndpoints };
   } catch (error) {
     console.error(`Error sending push notification to user ${userId}:`, error.message);
     return { sent: 0, failed: 0, cleaned: 0, error: error.message };
