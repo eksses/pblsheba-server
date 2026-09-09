@@ -1,4 +1,4 @@
-const supabase = require('../utils/supabase');
+const db = require('../utils/db');
 
 /**
  * Analytics Service
@@ -7,7 +7,7 @@ const supabase = require('../utils/supabase');
 const getStaffPerformance = async () => {
   try {
     // 1. Get all employees
-    const { data: employees, error: empError } = await supabase
+    const { data: employees, error: empError } = await db
       .from('User')
       .select('id, name, phone')
       .eq('role', 'employee');
@@ -17,14 +17,14 @@ const getStaffPerformance = async () => {
     // 2. Fetch counts for each employee
     const performance = await Promise.all(employees.map(async (emp) => {
       // Count registrations
-      const { count: regCount } = await supabase
+      const { count: regCount } = await db
         .from('User')
         .select('*', { count: 'exact', head: true })
         .eq('referredById', emp.id)
         .eq('role', 'member');
 
       // Count surveys
-      const { count: surveyCount } = await supabase
+      const { count: surveyCount } = await db
         .from('Survey')
         .select('*', { count: 'exact', head: true })
         .eq('submittedById', emp.id);

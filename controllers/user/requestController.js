@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 
 const { sendRoleNotification } = require('../../utils/pushNotification');
@@ -11,7 +11,7 @@ const requestEdit = async (req, res) => {
   try {
     const { requestedChanges } = req.body;
 
-    const { data: updatedUser, error } = await supabase
+    const { data: updatedUser, error } = await db
       .from('User')
       .update({
         editRequestPending: true,

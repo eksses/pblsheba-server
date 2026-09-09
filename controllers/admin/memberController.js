@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
 const AuthService = require('../../services/authService');
@@ -11,14 +11,14 @@ const createMember = async (req, res) => {
   try {
     const { name, fatherName, dob, nid, phone, email, address, paymentMethod, paymentNumber, password, trxId } = req.body;
 
-    const { data: exists } = await supabase.from('User').select('id').eq('phone', phone).single();
+    const { data: exists } = await db.from('User').select('id').eq('phone', phone).single();
     if (exists) return res.status(400).json({ message: 'Phone already in use' });
 
     const imageUrl = req.file ? req.file.path : null;
     const hashedPassword = await AuthService.hashPassword(password);
     const memberId = require('crypto').randomUUID();
 
-    const { data: member, error } = await supabase
+    const { data: member, error } = await db
       .from('User')
       .insert([{
         id: memberId,
@@ -55,10 +55,10 @@ const createMember = async (req, res) => {
 
 const getMembers = async (req, res) => {
   try {
-    const { data: settings } = await supabase.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
+    const { data: settings } = await db.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
     const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
 
-    let query = supabase
+    let query = db
       .from('User')
       .select('id, name, fatherName, email, phone, status, imageUrl, nid, createdAt, referredById')
       .eq('role', 'member')
@@ -81,10 +81,10 @@ const deleteMember = async (req, res) => {
   try {
     if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
 
-    const { data: user } = await supabase.from('User').select('name, phone').eq('id', req.params.id).single();
+    const { data: user } = await db.from('User').select('name, phone').eq('id', req.params.id).single();
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const { error } = await supabase.from('User').delete().eq('id', req.params.id);
+    const { error } = await db.from('User').delete().eq('id', req.params.id);
     if (error) throw error;
 
     await LogService.warn(
@@ -106,7 +106,7 @@ const updateMember = async (req, res) => {
       return res.status(403).json({ message: 'Only owners can edit member details' });
     }
 
-    const { data: user } = await supabase.from('User').select('name').eq('id', req.params.id).single();
+    const { data: user } = await db.from('User').select('name').eq('id', req.params.id).single();
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const updateData = {};
@@ -121,7 +121,7 @@ const updateMember = async (req, res) => {
       updateData.password = await AuthService.hashPassword(req.body.password);
     }
 
-    const { data: updatedUser, error } = await supabase
+    const { data: updatedUser, error } = await db
       .from('User')
       .update({ ...updateData, updatedAt: new Date().toISOString() })
       .eq('id', req.params.id)

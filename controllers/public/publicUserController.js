@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const CacheService = require('../../services/cacheService');
 
 /**
@@ -13,7 +13,7 @@ const publicSearch = async (req, res) => {
     const cached = await CacheService.get(cacheKey);
     if (cached) return res.json(cached);
 
-    let query = supabase.from('User').select('id, name, status, imageUrl').eq('role', 'member');
+    let query = db.from('User').select('id, name, status, imageUrl').eq('role', 'member');
 
     if (name?.trim()) query = query.ilike('name', `%${name.trim()}%`);
     if (fatherName?.trim()) query = query.ilike('fatherName', `%${fatherName.trim()}%`);
@@ -36,7 +36,7 @@ const getPublicSettings = async (req, res) => {
     let publicSettings = await CacheService.get(cacheKey);
 
     if (!publicSettings) {
-      const { data: settings } = await supabase.from('Setting').select('*').eq('id', 1).single();
+      const { data: settings } = await db.from('Setting').select('*').eq('id', 1).single();
 
       const activePayments = Array.isArray(settings?.paymentMethods) ? settings.paymentMethods.filter(p => p.isActive) : [];
       publicSettings = {

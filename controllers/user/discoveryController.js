@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const CacheService = require('../../services/cacheService');
 
 /**
@@ -13,14 +13,14 @@ const searchUsers = async (req, res) => {
     const cached = await CacheService.get(cacheKey);
     if (cached) return res.json(cached);
 
-    let query = supabase.from('User').select('id, name, fatherName, imageUrl, status, role, phone, nid, email, address');
+    let query = db.from('User').select('id, name, fatherName, imageUrl, status, role, phone, nid, email, address');
 
     if (name?.trim()) query = query.ilike('name', `%${name.trim()}%`);
     if (fatherName?.trim()) query = query.ilike('fatherName', `%${fatherName.trim()}%`);
     if (nid?.trim()) query = query.ilike('nid', `%${nid.trim()}%`);
 
     const settings = await CacheService.get('system_settings') ||
-      (await supabase.from('Setting').select('*').eq('id', 1).single()).data;
+      (await db.from('Setting').select('*').eq('id', 1).single()).data;
 
     const employeeCanViewAll = settings?.employeeCanViewAll || false;
 

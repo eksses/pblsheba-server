@@ -16,13 +16,6 @@ class LogService {
    */
   static async create({ level = 'info', message, action, userId, metadata = {} }) {
     try {
-      const mongoose = require('mongoose');
-      // If DB is not connected, just log to console and don't get stuck
-      if (mongoose.connection.readyState !== 1) {
-        console.log(`[${level.toUpperCase()}][${action}] ${message}`, metadata);
-        return;
-      }
-
       // Don't 'await' the create so the main process doesn't wait for DB write
       SystemLog.create({
         level,

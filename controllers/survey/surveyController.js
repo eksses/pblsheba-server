@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 
 /**
@@ -17,7 +17,7 @@ const createSurvey = async (req, res) => {
       return res.status(400).json({ message: 'Name, Phone, and Ward No are required.' });
     }
 
-    const { data: survey, error } = await supabase
+    const { data: survey, error } = await db
       .from('Survey')
       .insert([{
         id: require('crypto').randomUUID(),
@@ -68,7 +68,7 @@ const getSurveys = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized access.' });
     }
 
-    let query = supabase
+    let query = db
       .from('Survey')
       .select('*, submittedBy:User(name, phone)')
       .order('createdAt', { ascending: false });
@@ -94,7 +94,7 @@ const getSurveyStats = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    const { data: employees, error: empError } = await supabase
+    const { data: employees, error: empError } = await db
       .from('User')
       .select('id, name, role')
       .in('role', ['employee', 'owner']);
@@ -102,7 +102,7 @@ const getSurveyStats = async (req, res) => {
     if (empError) throw empError;
 
     const stats = await Promise.all(employees.map(async (emp) => {
-      const { count } = await supabase
+      const { count } = await db
         .from('Survey')
         .select('*', { count: 'exact', head: true })
         .eq('submittedById', emp.id);

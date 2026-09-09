@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const AuthService = require('../../services/authService');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
@@ -13,18 +13,18 @@ const registerUser = async (req, res) => {
     const { name, fatherName, dob, nid, phone, paymentNumber, password, paymentMethod, trxId } = req.body;
 
     // Check availability
-    const { data: userExists } = await supabase.from('User').select('id').eq('phone', phone).single();
+    const { data: userExists } = await db.from('User').select('id').eq('phone', phone).single();
     if (userExists) return res.status(400).json({ message: 'User with this phone already exists' });
 
     if (nid) {
-      const { data: nidExists } = await supabase.from('User').select('id').eq('nid', nid).single();
+      const { data: nidExists } = await db.from('User').select('id').eq('nid', nid).single();
       if (nidExists) return res.status(400).json({ message: 'User with this NID already exists' });
     }
 
     const imageUrl = req.file ? req.file.path : null;
     const hashedPassword = await AuthService.hashPassword(password);
 
-    const { data: user, error } = await supabase
+    const { data: user, error } = await db
       .from('User')
       .insert([{
         id: require('crypto').randomUUID(),
@@ -85,7 +85,7 @@ const authUser = async (req, res) => {
   try {
     const { phone, password } = req.body;
 
-    const { data: user, error } = await supabase.from('User').select('*').eq('phone', phone).single();
+    const { data: user, error } = await db.from('User').select('*').eq('phone', phone).single();
 
     if (error || !user) {
       return res.status(401).json({ message: 'Invalid phone or password' });

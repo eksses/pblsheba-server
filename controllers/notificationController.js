@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const supabase = require('../utils/supabase');
+const db = require('../utils/db');
 const { sendPushNotification, sendRoleNotification } = require('../utils/pushNotification');
 
 const generateId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 25);
@@ -20,7 +20,7 @@ const subscribe = async (req, res) => {
     }
 
     // Manual check-then-act to ensure maximum reliability and correct ID handling
-    const { data: existingSub, error: fetchError } = await supabase
+    const { data: existingSub, error: fetchError } = await db
       .from('PushSubscription')
       .select('id')
       .eq('endpoint', endpoint)
@@ -32,7 +32,7 @@ const subscribe = async (req, res) => {
     let isNew = false;
     if (existingSub) {
       // Update existing subscription's keys and owner
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from('PushSubscription')
         .update({ 
           userId, 
@@ -43,7 +43,7 @@ const subscribe = async (req, res) => {
       error = updateError;
     } else {
       // Insert new subscription with generated ID
-      const { error: insertError } = await supabase
+      const { error: insertError } = await db
         .from('PushSubscription')
         .insert({ 
           id: generateId(), 
@@ -83,7 +83,7 @@ const subscribe = async (req, res) => {
 const unsubscribe = async (req, res) => {
   try {
     const { endpoint } = req.body;
-    const { error } = await supabase
+    const { error } = await db
       .from('PushSubscription')
       .delete()
       .eq('endpoint', endpoint);
@@ -139,7 +139,7 @@ const broadcast = async (req, res) => {
 
 const mySubscriptions = async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('PushSubscription')
       .select('id, endpoint, createdAt')
       .eq('userId', req.user.id)
@@ -162,7 +162,7 @@ const mySubscriptions = async (req, res) => {
 
 const allSubscriptions = async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('PushSubscription')
       .select('id, userId, endpoint, createdAt')
       .order('createdAt', { ascending: false });
@@ -185,7 +185,7 @@ const allSubscriptions = async (req, res) => {
 
 const clearAllSubscriptions = async (req, res) => {
   try {
-    const { error } = await supabase
+    const { error } = await db
       .from('PushSubscription')
       .delete()
       .neq('id', 'placeholder'); // Delete everything

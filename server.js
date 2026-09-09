@@ -3,21 +3,50 @@ dotenv.config();
 
 const express = require('express');
 const connectDB = require('./config/db');
-
 const mongoose = require('mongoose');
-// Disable command buffering to prevent hanging if DB is not connected
-// Enable command buffering (default) to wait for connection before failing
+
 mongoose.set('bufferCommands', true);
 
-// Initial connection attempt
-connectDB().catch(err => console.error('Initial DB connect failed:', err.message));
+// Initial connection attempt for MongoDB (if configured)
+if (process.env.MONGO_URI) {
+  connectDB().catch(err => console.error('MongoDB connect error:', err.message));
+}
 
 const app = express();
 
+// Hardcoded Origins with Environment Variable Overrides
+const allowedOrigins = [
+  process.env.CLIENT_URL || 'https://pblsheba.vercel.app',
+  process.env.ADMIN_URL || 'https://pblsheba-admin.vercel.app',
+  process.env.SERVER_URL || 'https://pblsheba-server.vercel.app',
+  'https://pblsheba.vercel.app',
+  'https://pblsheba-admin.vercel.app',
+  'https://pblsheba-server.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  'http://localhost:5000'
+];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (!origin || allowedOrigins.includes(origin) || allowedOrigins.some(o => origin && origin.startsWith(o.replace(/\/$/, '')))) {
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS, PATCH, DELETE, POST, PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Vary', 'Origin');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  next();
+});
+
 app.use(express.json());
-
-
-
 
 app.get('/api/ping', (req, res) => res.send('pong'));
 
@@ -35,133 +64,14 @@ app.use('/api/public', publicRoutes);
 app.use('/api/surveys', surveyRoutes);
 app.use('/api/notifications', notificationRoutes);
 
-// System health checks are handled in publicRoutes via healthController
-
-// Diagnostic: comprehensive push system test (remove after debugging)
-app.get('/api/debug/test-push-table', async (req, res) => {
-  const results = {};
-  
-  try {
-    const supabase = require('./utils/supabase');
-    const webpush = require('web-push');
-    
-    // Check 1: VAPID configured?
-    results.vapid = {
-      publicKey: process.env.VAPID_PUBLIC_KEY ? process.env.VAPID_PUBLIC_KEY.substring(0, 20) + '...' : 'MISSING',
-      privateKey: process.env.VAPID_PRIVATE_KEY ? 'SET (' + process.env.VAPID_PRIVATE_KEY.length + ' chars)' : 'MISSING',
-      subject: process.env.VAPID_SUBJECT || 'MISSING'
-    };
-
-    // Check 2: Read subscriptions
-    const { data: subs, error: readError } = await supabase
-      .from('PushSubscription')
-      .select('id, userId, endpoint')
-      .limit(5);
-
-    if (readError) {
-      results.subscriptions = { error: readError.message };
-      return res.json(results);
-    }
-    
-    results.subscriptions = {
-      count: subs?.length || 0,
-      endpoints: subs?.map(s => s.endpoint.substring(0, 80) + '...') || []
-    };
-
-    // Check 3: Try live push to first subscription
-    if (subs && subs.length > 0) {
-      const { data: fullSub } = await supabase
-        .from('PushSubscription')
-        .select('*')
-        .eq('id', subs[0].id)
-        .single();
-
-      if (fullSub) {
-        // Re-init VAPID just to be safe
-        try {
-          webpush.setVapidDetails(
-            process.env.VAPID_SUBJECT,
-            process.env.VAPID_PUBLIC_KEY,
-            process.env.VAPID_PRIVATE_KEY
-          );
-        } catch (vapidErr) {
-          results.vapidInitError = vapidErr.message;
-        }
-
-        const pushConfig = {
-          endpoint: fullSub.endpoint,
-          keys: { p256dh: fullSub.p256dh, auth: fullSub.auth }
-        };
-
-        try {
-          const pushResult = await webpush.sendNotification(
-            pushConfig,
-            JSON.stringify({ 
-              title: 'PBL Diagnostic', 
-              body: 'If you see this, push works!', 
-              icon: '/logo.png', 
-              url: '/' 
-            })
-          );
-          results.livePush = {
-            status: 'SUCCESS',
-            statusCode: pushResult.statusCode,
-            headers: pushResult.headers,
-            body: pushResult.body
-          };
-        } catch (pushErr) {
-          results.livePush = {
-            status: 'FAILED',
-            statusCode: pushErr.statusCode,
-            body: pushErr.body,
-            message: pushErr.message,
-            endpoint: fullSub.endpoint.substring(0, 80)
-          };
-        }
-      }
-    }
-
-    res.json(results);
-  } catch (err) {
-    results.exception = err.message;
-    res.json(results);
-  }
-});
-
-app.get('/api/debug/mongo', async (req, res) => {
-  const status = {
-    readyState: mongoose.connection.readyState,
-    readyStateDesc: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState],
-    uriSet: !!process.env.MONGO_URI,
-    uriLength: process.env.MONGO_URI ? process.env.MONGO_URI.length : 0,
-    nodeEnv: process.env.NODE_ENV,
-    vercel: process.env.VERCEL
-  };
-  
-  if (mongoose.connection.readyState !== 1) {
-    try {
-      const connectDB = require('./config/db');
-      await connectDB();
-      status.newReadyState = mongoose.connection.readyState;
-      status.newReadyStateDesc = ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState];
-    } catch (err) {
-      status.connectError = err.message;
-    }
-  }
-
-  res.json(status);
-});
-
-// Handle favicon requests to prevent 404 logs
+// Handle favicon requests
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 const { ZodError } = require('zod');
-
 const logger = require('./utils/logger');
 
 // Global Error Handler
 app.use((err, req, res, next) => {
-  // Handle Zod Validation Errors
   const zodIssues = err.issues || err.errors;
   if (err instanceof ZodError || (err.name === 'ZodError' && zodIssues)) {
     const formatted = (zodIssues || []).map(e => ({

@@ -1,5 +1,5 @@
 const webpush = require('web-push');
-const supabase = require('./supabase');
+const db = require('./db');
 
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT) {
   webpush.setVapidDetails(
@@ -13,7 +13,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env
 
 const sendPushNotification = async (userId, payload, customSubject = null) => {
   try {
-    const { data: subscriptions, error } = await supabase
+    const { data: subscriptions, error } = await db
       .from('PushSubscription')
       .select('*')
       .eq('userId', userId);
@@ -75,7 +75,7 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
         return { type: 'sent', endpoint: sub.endpoint };
       } catch (err) {
         if (err.statusCode === 410 || err.statusCode === 404) {
-          await supabase.from('PushSubscription').delete().eq('id', sub.id);
+          await db.from('PushSubscription').delete().eq('id', sub.id);
           return { type: 'cleaned' };
         } else if (err.statusCode === 429) {
           await new Promise(r => setTimeout(r, 1000));
@@ -115,7 +115,7 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
 
 const sendRoleNotification = async (role, payload, customSubject = null) => {
   try {
-    let query = supabase.from('User').select('id');
+    let query = db.from('User').select('id');
     if (role && role !== 'all') {
       query = query.eq('role', role);
     }
@@ -132,6 +132,9 @@ const sendRoleNotification = async (role, payload, customSubject = null) => {
 
     // Use chunked parallel processing to avoid overwhelming the event loop or database connections
     const CHUNK_SIZE = 25;
+    let totalSent = 0;
+    let totalFailed = 0;
+    let totalCleaned = 0;
     for (let i = 0; i < users.length; i += CHUNK_SIZE) {
       const chunk = users.slice(i, i + CHUNK_SIZE);
       const results = await Promise.all(

@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
 const AuthService = require('../../services/authService');
@@ -15,13 +15,13 @@ const createEmployee = async (req, res) => {
       return res.status(403).json({ message: 'Only owners can create employees' });
     }
 
-    const { data: exists } = await supabase.from('User').select('id').eq('phone', phone).single();
+    const { data: exists } = await db.from('User').select('id').eq('phone', phone).single();
     if (exists) return res.status(400).json({ message: 'Phone already in use' });
 
     const hashedPassword = await AuthService.hashPassword(password);
     const employeeId = require('crypto').randomUUID();
 
-    const { data: employee, error } = await supabase
+    const { data: employee, error } = await db
       .from('User')
       .insert([{
         id: employeeId,
@@ -55,7 +55,7 @@ const createEmployee = async (req, res) => {
 const getEmployees = async (req, res) => {
   try {
     if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
-    const { data: employees, error } = await supabase
+    const { data: employees, error } = await db
       .from('User')
       .select('id, name, phone, email, status, role, createdAt')
       .eq('role', 'employee');
@@ -71,10 +71,10 @@ const deleteEmployee = async (req, res) => {
   try {
     if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
 
-    const { data: user } = await supabase.from('User').select('name, phone').eq('id', req.params.id).single();
+    const { data: user } = await db.from('User').select('name, phone').eq('id', req.params.id).single();
     if (!user) return res.status(404).json({ message: 'Employee not found' });
 
-    const { error } = await supabase.from('User').delete().eq('id', req.params.id).eq('role', 'employee');
+    const { error } = await db.from('User').delete().eq('id', req.params.id).eq('role', 'employee');
     if (error) throw error;
 
     await LogService.warn(

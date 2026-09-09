@@ -1,9 +1,9 @@
-const supabase = require('../utils/supabase');
+const db = require('../utils/db');
 
 class JobApplication {
   static async create(data) {
     try {
-      const { data: application, error } = await supabase
+      const { data: application, error } = await db
         .from('JobApplication')
         .insert([{
           id: require('crypto').randomUUID(),
@@ -26,7 +26,7 @@ class JobApplication {
 
   static async findAll() {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('JobApplication')
         .select('*')
         .order('createdAt', { ascending: false });
@@ -41,7 +41,7 @@ class JobApplication {
 
   static async findById(id) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('JobApplication')
         .select('*')
         .eq('id', id)
@@ -57,7 +57,7 @@ class JobApplication {
 
   static async updateStatus(id, status, statusNote = '') {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('JobApplication')
         .update({ status, statusNote, updatedAt: new Date().toISOString() })
         .eq('id', id)

@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 const AuthService = require('../../services/authService');
 
@@ -15,7 +15,7 @@ const updateProfileImage = async (req, res) => {
 
     const imageUrl = req.file.path;
 
-    const { data: updatedUser, error } = await supabase
+    const { data: updatedUser, error } = await db
       .from('User')
       .update({ 
         imageUrl, 
@@ -48,7 +48,7 @@ const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     
     // Fetch user to verify current password
-    const { data: user, error: fetchError } = await supabase
+    const { data: user, error: fetchError } = await db
       .from('User')
       .select('password, name')
       .eq('id', req.user.id)
@@ -67,7 +67,7 @@ const changePassword = async (req, res) => {
 
     const hashedPassword = await AuthService.hashPassword(newPassword);
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await db
       .from('User')
       .update({
         password: hashedPassword,

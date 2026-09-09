@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
 const logger = require('../../utils/logger');
@@ -25,7 +25,7 @@ const getSettings = async (req, res) => {
 
       // 2. Fallback/Migration: If not in Mongo, check Supabase
       if (!settings) {
-        const { data: sbSettings } = await supabase.from('Setting').select('*').eq('id', 1).maybeSingle();
+        const { data: sbSettings } = await db.from('Setting').select('*').eq('id', 1).maybeSingle();
         
         if (sbSettings) {
           // Migrate Supabase data to MongoDB

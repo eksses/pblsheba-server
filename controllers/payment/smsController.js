@@ -2,7 +2,7 @@ const PaymentSms = require('../../models/PaymentSms');
 const { parseSms } = require('../../utils/smsParser');
 const { processSmsMatching } = require('../../services/paymentService');
 const CacheService = require('../../services/cacheService');
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const logger = require('../../utils/logger');
 
 /**

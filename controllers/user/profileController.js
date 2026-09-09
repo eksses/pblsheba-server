@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 const AuthService = require('../../services/authService');
 
@@ -23,7 +23,7 @@ const updateProfile = async (req, res) => {
       return res.status(400).json({ message: 'No updates provided' });
     }
 
-    const { data: updatedUser, error } = await supabase
+    const { data: updatedUser, error } = await db
       .from('User')
       .update({ ...updateData, updatedAt: new Date().toISOString() })
       .eq('id', req.user.id)
@@ -46,7 +46,7 @@ const changePassword = async (req, res) => {
     const { newPassword } = req.body;
     const hashedPassword = await AuthService.hashPassword(newPassword);
 
-    const { data: updatedUser, error } = await supabase
+    const { data: updatedUser, error } = await db
       .from('User')
       .update({
         password: hashedPassword,

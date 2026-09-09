@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
 
@@ -30,13 +30,13 @@ const createSurvey = async (req, res) => {
     }
 
     // 2. Check for duplicate phone in surveys (unique constraint in schema)
-    const { data: exists } = await supabase.from('Survey').select('id').eq('phone', phone).single();
+    const { data: exists } = await db.from('Survey').select('id').eq('phone', phone).single();
     if (exists) {
       return res.status(400).json({ message: 'Survey already exists for this phone number' });
     }
 
     // 3. Insert Survey
-    const { data: survey, error } = await supabase
+    const { data: survey, error } = await db
       .from('Survey')
       .insert([{
         name,
@@ -78,7 +78,7 @@ const createSurvey = async (req, res) => {
 
 const getMyStats = async (req, res) => {
   try {
-    const { count, error } = await supabase
+    const { count, error } = await db
       .from('Survey')
       .select('*', { count: 'exact', head: true })
       .eq('submittedById', req.user.id);

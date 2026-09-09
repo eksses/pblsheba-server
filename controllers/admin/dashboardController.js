@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const CacheService = require('../../services/cacheService');
 const AnalyticsService = require('../../services/analyticsService');
 
@@ -12,13 +12,13 @@ const getMetrics = async (req, res) => {
     const cached = await CacheService.get(cacheKey);
     if (cached) return res.json(cached);
 
-    const { data: settings } = await supabase.from('Setting').select('registrationFee, employeeCanViewAll').eq('id', 1).single();
+    const { data: settings } = await db.from('Setting').select('registrationFee, employeeCanViewAll').eq('id', 1).single();
     const fee = settings?.registrationFee || 365;
     const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
 
-    let totalQC = supabase.from('User').select('id', { count: 'exact', head: true }).eq('role', 'member');
-    let approvedQC = supabase.from('User').select('id', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
-    let pendingQC = supabase.from('User').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
+    let totalQC = db.from('User').select('id', { count: 'exact', head: true }).eq('role', 'member');
+    let approvedQC = db.from('User').select('id', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
+    let pendingQC = db.from('User').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
 
     if (!canViewAll) {
       totalQC = totalQC.eq('referredById', req.user.id);
@@ -36,7 +36,7 @@ const getMetrics = async (req, res) => {
       totalQC,
       pendingQC,
       approvedQC,
-      supabase.from('User').select('id', { count: 'exact', head: true }).eq('role', 'employee'),
+      db.from('User').select('id', { count: 'exact', head: true }).eq('role', 'employee'),
       req.user.role === 'owner' ? AnalyticsService.getStaffPerformance() : Promise.resolve(null)
     ]);
 

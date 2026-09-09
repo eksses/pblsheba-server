@@ -1,4 +1,4 @@
-const supabase = require('../../utils/supabase');
+const db = require('../../utils/db');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
 const { sendPushNotification } = require('../../utils/pushNotification');
@@ -21,7 +21,7 @@ const approveUser = async (req, res) => {
       updateData.verifiedBy = req.user.role === 'owner' ? 'admin' : 'system';
     }
 
-    const { data: updatedUser, error } = await supabase
+    const { data: updatedUser, error } = await db
       .from('User')
       .update({ ...updateData, updatedAt: new Date().toISOString() })
       .eq('id', req.params.id)
@@ -79,14 +79,14 @@ const approveUser = async (req, res) => {
 
 const getPendingMembers = async (req, res) => {
   try {
-    const { data: settings } = await supabase.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
+    const { data: settings } = await db.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
     const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
 
     const cacheKey = `pending_${req.user.id}_${canViewAll}`;
     const cached = await CacheService.get(cacheKey);
     if (cached) return res.json(cached);
 
-    let query = supabase
+    let query = db
       .from('User')
       .select('id, name, phone, email, status, role, createdAt, referredById')
       .eq('status', 'pending')
@@ -109,7 +109,7 @@ const getPendingMembers = async (req, res) => {
 
 const getEditRequests = async (req, res) => {
   try {
-    const { data: requests, error } = await supabase
+    const { data: requests, error } = await db
       .from('User')
       .select('id, name, phone, editRequestedChanges, updatedAt')
       .eq('editRequestPending', true);
@@ -123,7 +123,7 @@ const getEditRequests = async (req, res) => {
 
 const dismissEditRequest = async (req, res) => {
   try {
-    const { data: updatedUser, error } = await supabase
+    const { data: updatedUser, error } = await db
       .from('User')
       .update({ editRequestPending: false, editApproved: true })
       .eq('id', req.params.id)

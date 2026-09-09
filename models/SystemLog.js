@@ -1,4 +1,4 @@
-const supabase = require('../utils/supabase');
+const db = require('../utils/db');
 
 
 class SystemLog {
@@ -17,7 +17,7 @@ class SystemLog {
         createdAt: now
       };
 
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('SystemLog')
         .insert([logData])
         .select()
@@ -37,7 +37,7 @@ class SystemLog {
 
   static async find(query = {}, options = {}) {
     try {
-      let q = supabase.from('SystemLog').select('*');
+      let q = db.from('SystemLog').select('*');
 
       if (query.level) q = q.eq('level', query.level);
       if (query.userId) q = q.eq('userId', query.userId);
