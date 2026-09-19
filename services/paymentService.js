@@ -49,7 +49,7 @@ const processSmsMatching = async (smsId) => {
     // 5. Notify User
     await sendPushNotification(user.id, {
       title: 'Account Approved!',
-      body: 'Your payment was automatically verified. Welcome to PBL Sheba!',
+      body: 'Your payment was automatically verified. Welcome to Trust Unity BD!',
       url: '/profile'
     });
 

@@ -43,7 +43,7 @@ const approveUser = async (req, res) => {
     await sendPushNotification(updatedUser.id, {
       title: `Account ${status.charAt(0).toUpperCase() + status.slice(1)}`,
       body: status === 'approved' 
-        ? 'Congratulations! Your PBL Sheba account has been approved.' 
+        ? 'Congratulations! Your Trust Unity BD account has been approved.' 
         : `Your account status has been updated to ${status}.`,
       url: '/'
     });

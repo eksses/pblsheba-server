@@ -63,7 +63,7 @@ const subscribe = async (req, res) => {
       setTimeout(async () => {
         try {
           await sendPushNotification(userId, {
-            title: 'PBL Sheba',
+            title: 'Trust Unity BD',
             body: 'Welcome! Push notifications are now enabled on this device.',
             url: '/'
           }, req.headers.origin);
@@ -101,7 +101,7 @@ const testPush = async (req, res) => {
     const { title, body } = req.body;
 
     const result = await sendPushNotification(userId, {
-      title: title || 'PBL Sheba Test',
+      title: title || 'Trust Unity BD Test',
       body: body || 'Push notification is working!',
       url: '/'
     }, req.headers.origin);

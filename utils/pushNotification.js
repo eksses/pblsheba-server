@@ -29,14 +29,14 @@ const sendPushNotification = async (userId, payload, customSubject = null) => {
 
     // Align exactly with the iOS WebPush article structure
     const standardPayload = {
-      title: payload.title || 'PBL Sheba',
+      title: payload.title || 'Trust Unity BD',
       body: payload.body || payload.message || 'You have a new notification',
       data: {
         url: payload.url || '/'
       },
       // Nested object for Apple/FCM compatibility
       notification: {
-        title: payload.title || 'PBL Sheba',
+        title: payload.title || 'Trust Unity BD',
         body: payload.body || payload.message || 'You have a new notification',
         icon: '/logo.png'
       }
