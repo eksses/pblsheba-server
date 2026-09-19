@@ -55,8 +55,11 @@ const createMember = async (req, res) => {
 
 const getMembers = async (req, res) => {
   try {
-    const { data: settings } = await db.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
-    const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
+    let canViewAll = req.user.role === 'owner';
+    if (!canViewAll) {
+      const { data: settings } = await db.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
+      canViewAll = Boolean(settings?.employeeCanViewAll);
+    }
 
     let query = db
       .from('User')

@@ -12,14 +12,13 @@ const registerUser = async (req, res) => {
   try {
     const { name, fatherName, dob, nid, phone, paymentNumber, password, paymentMethod, trxId } = req.body;
 
-    // Check availability
-    const { data: userExists } = await db.from('User').select('id').eq('phone', phone).single();
-    if (userExists) return res.status(400).json({ message: 'User with this phone already exists' });
-
-    if (nid) {
-      const { data: nidExists } = await db.from('User').select('id').eq('nid', nid).single();
-      if (nidExists) return res.status(400).json({ message: 'User with this NID already exists' });
-    }
+    // Check availability in parallel
+    const [phoneCheck, nidCheck] = await Promise.all([
+      db.from('User').select('id').eq('phone', phone).single(),
+      nid ? db.from('User').select('id').eq('nid', nid).single() : Promise.resolve({ data: null })
+    ]);
+    if (phoneCheck.data) return res.status(400).json({ message: 'User with this phone already exists' });
+    if (nidCheck.data) return res.status(400).json({ message: 'User with this NID already exists' });
 
     const imageUrl = req.file ? req.file.path : null;
     const hashedPassword = await AuthService.hashPassword(password);
@@ -48,26 +47,26 @@ const registerUser = async (req, res) => {
 
     if (error) throw error;
 
-    await LogService.info(
+    LogService.info(
       `New user registration: ${user.name} (${user.phone})`,
       'USER_REGISTER',
       user.id,
       { ip: req.ip }
-    );
+    ).catch(() => {});
 
-    // Notify Admins
-    await sendRoleNotification('owner', {
-      title: 'New Member Registration',
-      body: `${user.name} has registered and is awaiting approval.`,
-      url: '/approvals'
-    });
-
-    // Notify User about pending payment
-    await sendPushNotification(user.id, {
-      title: 'Registration Received',
-      body: 'Your registration is being processed. Payment status: PENDING.',
-      url: '/profile'
-    });
+    // Notify Admins and User asynchronously in background (non-blocking)
+    Promise.allSettled([
+      sendRoleNotification('owner', {
+        title: 'New Member Registration',
+        body: `${user.name} has registered and is awaiting approval.`,
+        url: '/approvals'
+      }),
+      sendPushNotification(user.id, {
+        title: 'Registration Received',
+        body: 'Your registration is being processed. Payment status: PENDING.',
+        url: '/profile'
+      })
+    ]).catch(() => {});
 
     res.status(201).json({
       _id: user.id,

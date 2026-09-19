@@ -39,37 +39,31 @@ const approveUser = async (req, res) => {
       { adminId: req.user.id, status }
     );
 
-    // Notify User about status change
-    await sendPushNotification(updatedUser.id, {
-      title: `Account ${status.charAt(0).toUpperCase() + status.slice(1)}`,
-      body: status === 'approved' 
-        ? 'Congratulations! Your Trust Unity BD account has been approved.' 
-        : `Your account status has been updated to ${status}.`,
-      url: '/'
-    });
-
-    if (paymentVerified) {
-      await sendPushNotification(updatedUser.id, {
+    // Notify User and Staff asynchronously in the background (non-blocking)
+    Promise.allSettled([
+      sendPushNotification(updatedUser.id, {
+        title: `Account ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        body: status === 'approved' 
+          ? 'Congratulations! Your Trust Unity BD account has been approved.' 
+          : `Your account status has been updated to ${status}.`,
+        url: '/'
+      }),
+      paymentVerified ? sendPushNotification(updatedUser.id, {
         title: 'Payment Verified',
         body: 'Your registration fee payment has been verified by the admin.',
         url: '/profile'
-      });
-    }
-
-    // Notify Referring Staff (if exists)
-    if (updatedUser.referredById) {
-      await sendPushNotification(updatedUser.referredById, {
+      }) : Promise.resolve(),
+      updatedUser.referredById ? sendPushNotification(updatedUser.referredById, {
         title: `Registration ${status.charAt(0).toUpperCase() + status.slice(1)}`,
         body: `The registration for ${updatedUser.name} has been ${status} by Admin.`,
         url: '/employees/registrations'
-      }, req.headers.origin);
-    }
+      }, req.headers.origin) : Promise.resolve()
+    ]).catch(() => {});
 
-    // Invalidate metrics
-    await CacheService.invalidateMetrics(req.user.id, req.user.role, updatedUser.referredById);
-    // Also clear pending list cache
-    await CacheService.clear(`pending_${req.user.id}_true`);
-    await CacheService.clear(`pending_${req.user.id}_false`);
+    // Invalidate metrics asynchronously
+    CacheService.invalidateMetrics(req.user.id, req.user.role, updatedUser.referredById).catch(() => {});
+    CacheService.clear(`pending_${req.user.id}_true`).catch(() => {});
+    CacheService.clear(`pending_${req.user.id}_false`).catch(() => {});
 
     res.json({ ...updatedUser, _id: updatedUser.id });
   } catch (error) {
@@ -79,8 +73,11 @@ const approveUser = async (req, res) => {
 
 const getPendingMembers = async (req, res) => {
   try {
-    const { data: settings } = await db.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
-    const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
+    let canViewAll = req.user.role === 'owner';
+    if (!canViewAll) {
+      const { data: settings } = await db.from('Setting').select('employeeCanViewAll').eq('id', 1).single();
+      canViewAll = Boolean(settings?.employeeCanViewAll);
+    }
 
     const cacheKey = `pending_${req.user.id}_${canViewAll}`;
     const cached = await CacheService.get(cacheKey);

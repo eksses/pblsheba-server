@@ -88,34 +88,28 @@ const getSurveys = async (req, res) => {
   }
 };
 
+const neon = require('../../utils/neon');
+
 const getSurveyStats = async (req, res) => {
   try {
     if (req.user.role !== 'owner') {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
-    const { data: employees, error: empError } = await db
-      .from('User')
-      .select('id, name, role')
-      .in('role', ['employee', 'owner']);
+    const result = await neon.pool.query(`
+      SELECT 
+        u.id, 
+        u.name, 
+        u.role, 
+        COUNT(s.id)::int AS count
+      FROM "User" u
+      LEFT JOIN "Survey" s ON s."submittedById" = u.id
+      WHERE u.role IN ('employee', 'owner')
+      GROUP BY u.id, u.name, u.role
+      ORDER BY count DESC;
+    `);
 
-    if (empError) throw empError;
-
-    const stats = await Promise.all(employees.map(async (emp) => {
-      const { count } = await db
-        .from('Survey')
-        .select('*', { count: 'exact', head: true })
-        .eq('submittedById', emp.id);
-
-      return {
-        id: emp.id,
-        name: emp.name,
-        role: emp.role,
-        count: count || 0
-      };
-    }));
-
-    res.json(stats.sort((a, b) => b.count - a.count));
+    res.json(result.rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

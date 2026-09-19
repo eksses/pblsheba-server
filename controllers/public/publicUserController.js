@@ -24,6 +24,7 @@ const publicSearch = async (req, res) => {
 
     const results = users.map(u => ({ ...u, _id: u.id }));
     await CacheService.set(cacheKey, results, 600);
+    res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120');
     res.json(results);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -48,6 +49,7 @@ const getPublicSettings = async (req, res) => {
       await CacheService.set(cacheKey, publicSettings, 3600);
     }
 
+    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
     res.json(publicSettings);
   } catch (error) {
     res.status(500).json({ message: error.message });
