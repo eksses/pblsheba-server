@@ -16,9 +16,11 @@ function getPool() {
     ssl: {
       rejectUnauthorized: false
     },
-    max: 20,
+    max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000
+    connectionTimeoutMillis: 5000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000
   });
 
   pool.on('error', (err) => {

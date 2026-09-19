@@ -6,6 +6,8 @@ const AnalyticsService = require('../../services/analyticsService');
  * Dashboard Controller
  * Handles metric aggregation and leaderboard data for administrative roles.
  */
+const neon = require('../../utils/neon');
+
 const getMetrics = async (req, res) => {
   try {
     const cacheKey = `metrics_${req.user.id}_${req.user.role}`;
@@ -16,35 +18,27 @@ const getMetrics = async (req, res) => {
     const fee = settings?.registrationFee || 365;
     const canViewAll = req.user.role === 'owner' || settings?.employeeCanViewAll;
 
-    let totalQC = db.from('User').select('id', { count: 'exact', head: true }).eq('role', 'member');
-    let approvedQC = db.from('User').select('id', { count: 'exact', head: true }).eq('status', 'approved').eq('role', 'member');
-    let pendingQC = db.from('User').select('id', { count: 'exact', head: true }).eq('status', 'pending').eq('role', 'member');
+    const userFilterSql = canViewAll ? '' : ` AND "referredById" = $1`;
+    const params = canViewAll ? [] : [req.user.id];
 
-    if (!canViewAll) {
-      totalQC = totalQC.eq('referredById', req.user.id);
-      approvedQC = approvedQC.eq('referredById', req.user.id);
-      pendingQC = pendingQC.eq('referredById', req.user.id);
-    }
-
-    const [
-      { count: totalMembers },
-      { count: pendingApprovals },
-      { count: approvedMembers },
-      { count: totalEmployees },
-      staffPerformance
-    ] = await Promise.all([
-      totalQC,
-      pendingQC,
-      approvedQC,
-      db.from('User').select('id', { count: 'exact', head: true }).eq('role', 'employee'),
+    const [countsRes, staffPerformance] = await Promise.all([
+      neon.pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE role = 'member'${userFilterSql})::int AS "totalMembers",
+          COUNT(*) FILTER (WHERE role = 'member' AND status = 'pending'${userFilterSql})::int AS "pendingApprovals",
+          COUNT(*) FILTER (WHERE role = 'member' AND status = 'approved'${userFilterSql})::int AS "approvedMembers",
+          COUNT(*) FILTER (WHERE role = 'employee')::int AS "totalEmployees"
+        FROM "User";
+      `, params),
       req.user.role === 'owner' ? AnalyticsService.getStaffPerformance() : Promise.resolve(null)
     ]);
 
+    const counts = countsRes.rows[0] || {};
     const metrics = {
-      totalMembers: totalMembers || 0,
-      totalEmployees: totalEmployees || 0,
-      pendingApprovals: pendingApprovals || 0,
-      totalCollected: (approvedMembers || 0) * fee,
+      totalMembers: counts.totalMembers || 0,
+      totalEmployees: counts.totalEmployees || 0,
+      pendingApprovals: counts.pendingApprovals || 0,
+      totalCollected: (counts.approvedMembers || 0) * fee,
       staffPerformance
     };
 

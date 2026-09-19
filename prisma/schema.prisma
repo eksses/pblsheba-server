@@ -36,6 +36,10 @@ model User {
   referredBy           User?      @relation("Referral", fields: [referredById], references: [id])
   referrals            User[]             @relation("Referral")
   pushSubscriptions    PushSubscription[]
+
+  @@index([role, status])
+  @@index([referredById])
+  @@index([createdAt])
 }
 
 model Survey {
@@ -56,6 +60,9 @@ model Survey {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   submittedBy   User     @relation(fields: [submittedById], references: [id])
+
+  @@index([submittedById])
+  @@index([createdAt])
 }
 
 model Setting {

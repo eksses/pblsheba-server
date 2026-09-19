@@ -48,6 +48,10 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Pre-warm database pool asynchronously on server boot
+const neon = require('./utils/neon');
+neon.ping().catch(err => console.warn('[Neon Postgres] Pre-warm ping notice:', err.message));
+
 app.get('/api/ping', (req, res) => res.send('pong'));
 
 const authRoutes = require('./routes/authRoutes');

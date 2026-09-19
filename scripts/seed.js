@@ -14,7 +14,7 @@ const seedData = async () => {
         registrationFee: 365,
         employeeCanViewAll: false,
         paymentMethods: [
-          { name: 'bKash', number: '01700000000', instructions: 'Send money to this bKash personal number and enter the TrxID below.', isActive: true, themeColor: '#E2136E', logoUrl: '' },
+          { name: 'bKash', number: '01322511554', instructions: 'Send money to this bKash personal number (01322511554) and enter the TrxID below.', isActive: true, themeColor: '#E2136E', logoUrl: '' },
           { name: 'Nagad', number: '01700000000', instructions: 'Send money to this Nagad personal number and enter the TrxID below.', isActive: true, themeColor: '#F7931E', logoUrl: '' }
         ],
         updatedAt: now

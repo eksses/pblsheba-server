@@ -1,4 +1,4 @@
-const db = require('../utils/db');
+const neon = require('../utils/neon');
 
 /**
  * Analytics Service
@@ -6,40 +6,29 @@ const db = require('../utils/db');
  */
 const getStaffPerformance = async () => {
   try {
-    // 1. Get all employees
-    const { data: employees, error: empError } = await db
-      .from('User')
-      .select('id, name, phone')
-      .eq('role', 'employee');
+    const res = await neon.pool.query(`
+      SELECT 
+        u.id, u.name, u.phone,
+        COALESCE(r.reg_count, 0)::int AS registrations,
+        COALESCE(s.survey_count, 0)::int AS surveys,
+        (COALESCE(r.reg_count, 0) + COALESCE(s.survey_count, 0))::int AS "totalActivity"
+      FROM "User" u
+      LEFT JOIN (
+        SELECT "referredById", COUNT(*)::int AS reg_count 
+        FROM "User" 
+        WHERE role = 'member' 
+        GROUP BY "referredById"
+      ) r ON r."referredById" = u.id
+      LEFT JOIN (
+        SELECT "submittedById", COUNT(*)::int AS survey_count 
+        FROM "Survey" 
+        GROUP BY "submittedById"
+      ) s ON s."submittedById" = u.id
+      WHERE u.role = 'employee'
+      ORDER BY "totalActivity" DESC;
+    `);
 
-    if (empError) throw empError;
-
-    // 2. Fetch counts for each employee
-    const performance = await Promise.all(employees.map(async (emp) => {
-      // Count registrations
-      const { count: regCount } = await db
-        .from('User')
-        .select('*', { count: 'exact', head: true })
-        .eq('referredById', emp.id)
-        .eq('role', 'member');
-
-      // Count surveys
-      const { count: surveyCount } = await db
-        .from('Survey')
-        .select('*', { count: 'exact', head: true })
-        .eq('submittedById', emp.id);
-
-      return {
-        id: emp.id,
-        name: emp.name,
-        phone: emp.phone,
-        registrations: regCount || 0,
-        surveys: surveyCount || 0,
-        totalActivity: (regCount || 0) + (surveyCount || 0)
-      };
-    }));
-
-    return performance.sort((a, b) => b.totalActivity - a.totalActivity);
+    return res.rows;
   } catch (error) {
     console.error('Analytics Error:', error.message);
     throw error;
