@@ -1,18 +1,12 @@
-const crypto = require('crypto');
 const db = require('../../utils/db');
+const neon = require('../../utils/neon');
 const LogService = require('../../services/logService');
 const CacheService = require('../../services/cacheService');
 const logger = require('../../utils/logger');
 
 /**
  * Settings Controller
- * Handles system-wide configuration and metadata.
- */
-const Settings = require('../../models/Settings');
-
-/**
- * Settings Controller
- * Handles system-wide configuration and metadata using MongoDB.
+ * Handles system-wide configuration and metadata using Neon PostgreSQL.
  */
 const getSettings = async (req, res) => {
   try {
@@ -20,38 +14,62 @@ const getSettings = async (req, res) => {
     let settings = await CacheService.get(cacheKey);
 
     if (!settings) {
-      // 1. Try to find in MongoDB
-      settings = await Settings.findOne();
+      const { data, error } = await db
+        .from('Setting')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
 
-      // 2. Fallback/Migration: If not in Mongo, check Supabase
+      if (error) throw error;
+      settings = data;
+
       if (!settings) {
-        const { data: sbSettings } = await db.from('Setting').select('*').eq('id', 1).maybeSingle();
-        
-        if (sbSettings) {
-          // Migrate Supabase data to MongoDB
-          settings = await Settings.create({
-            registrationFee: sbSettings.registrationFee,
-            jobApplicationsEnabled: sbSettings.jobApplicationsEnabled,
-            employeeCanViewAll: sbSettings.employeeCanViewAll,
-            paymentMethods: sbSettings.paymentMethods,
-            smsWebhookKey: sbSettings.smsWebhookKey || Array.from({length: 48}, () => Math.floor(Math.random() * 16).toString(16)).join('')
-          });
-          logger.info('Migrated settings from Supabase to MongoDB');
-        } else {
-          // Initialize fresh in MongoDB
-          settings = await Settings.create({
+        // Initialize default settings if row 1 doesn't exist
+        const now = new Date().toISOString();
+        const defaultPaymentMethods = [
+          { 
+            name: 'bKash', 
+            number: '01322511554', 
+            instructions: 'Send money to this bKash personal number (01322511554) and enter the TrxID below.', 
+            isActive: true, 
+            themeColor: '#E2136E', 
+            logoUrl: '' 
+          },
+          { 
+            name: 'Nagad', 
+            number: '01700000000', 
+            instructions: 'Send money to this Nagad personal number and enter the TrxID below.', 
+            isActive: true, 
+            themeColor: '#F7931E', 
+            logoUrl: '' 
+          }
+        ];
+
+        const { data: created, error: insertError } = await db
+          .from('Setting')
+          .insert([{
+            id: 1,
             registrationFee: 365,
             employeeCanViewAll: false,
-            jobApplicationsEnabled: true
-          });
-          logger.info('Initialized default settings in MongoDB');
-        }
+            jobApplicationsEnabled: true,
+            paymentMethods: defaultPaymentMethods,
+            smsWebhookKey: require('crypto').randomBytes(24).toString('hex'),
+            createdAt: now,
+            updatedAt: now
+          }])
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        settings = created;
       }
-      
+
       await CacheService.set(cacheKey, settings, 3600);
     }
 
-    res.json({ ...settings.toObject(), _id: settings._id, id: 1 });
+    // Set HTTP cache header for edge performance
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    res.json({ ...settings, _id: settings.id, id: settings.id });
   } catch (error) {
     logger.error('Failed to get settings:', error);
     res.status(500).json({ message: error.message });
@@ -62,16 +80,23 @@ const updateSettings = async (req, res) => {
   try {
     if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
 
-    let settings = await Settings.findOne();
-    if (!settings) settings = new Settings();
+    const updates = {};
+    if (req.body.registrationFee !== undefined) updates.registrationFee = parseInt(req.body.registrationFee);
+    if (req.body.paymentMethods !== undefined) updates.paymentMethods = req.body.paymentMethods;
+    if (req.body.employeeCanViewAll !== undefined) updates.employeeCanViewAll = Boolean(req.body.employeeCanViewAll);
+    if (req.body.jobApplicationsEnabled !== undefined) updates.jobApplicationsEnabled = Boolean(req.body.jobApplicationsEnabled);
+    if (req.body.smsWebhookKey !== undefined) updates.smsWebhookKey = req.body.smsWebhookKey;
+    updates.updatedAt = new Date().toISOString();
 
-    if (req.body.registrationFee !== undefined) settings.registrationFee = parseInt(req.body.registrationFee);
-    if (req.body.paymentMethods) settings.paymentMethods = req.body.paymentMethods;
-    if (req.body.employeeCanViewAll !== undefined) settings.employeeCanViewAll = Boolean(req.body.employeeCanViewAll);
-    if (req.body.jobApplicationsEnabled !== undefined) settings.jobApplicationsEnabled = Boolean(req.body.jobApplicationsEnabled);
-    if (req.body.smsWebhookKey !== undefined) settings.smsWebhookKey = req.body.smsWebhookKey;
-    
-    await settings.save();
+    const { data: updated, error } = await db
+      .from('Setting')
+      .update(updates)
+      .eq('id', 1)
+      .select()
+      .single();
+
+    if (error) throw error;
+
     await CacheService.invalidateSettings();
 
     await LogService.info(
@@ -79,9 +104,9 @@ const updateSettings = async (req, res) => {
       'ADMIN_UPDATE_SETTINGS',
       null,
       { adminId: req.user.id }
-    );
+    ).catch(() => {});
 
-    res.json({ ...settings.toObject(), _id: settings._id, id: 1 });
+    res.json({ ...updated, _id: updated.id, id: updated.id });
   } catch (error) {
     logger.error('Failed to update settings:', error);
     res.status(500).json({ message: error.message });
@@ -92,14 +117,17 @@ const regenerateSmsApiKey = async (req, res) => {
   try {
     if (req.user.role !== 'owner') return res.status(403).json({ message: 'Owner only' });
 
-    const newKey = Array.from({length: 48}, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    const newKey = require('crypto').randomBytes(24).toString('hex');
 
-    let settings = await Settings.findOne();
-    if (!settings) settings = new Settings();
+    const { data: updated, error } = await db
+      .from('Setting')
+      .update({ smsWebhookKey: newKey, updatedAt: new Date().toISOString() })
+      .eq('id', 1)
+      .select()
+      .single();
 
-    settings.smsWebhookKey = newKey;
-    await settings.save();
-    
+    if (error) throw error;
+
     await CacheService.invalidateSettings();
 
     LogService.info(
