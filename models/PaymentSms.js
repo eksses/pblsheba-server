@@ -1,22 +1,51 @@
-const mongoose = require('mongoose');
+const db = require('../utils/db');
+const crypto = require('crypto');
 
-if (process.env.NODE_ENV === 'test' && global.__PAYMENT_SMS_MOCK__) {
-  module.exports = global.__PAYMENT_SMS_MOCK__;
-} else {
-  const paymentSmsSchema = new mongoose.Schema({
-    sender: { type: String, required: true },
-    body: { type: String, required: true },
-    parsed: {
-      trxId: { type: String, unique: true, sparse: true },
-      amount: Number,
-      provider: { type: String, enum: ['bkash', 'nagad', 'rocket', 'unknown'], default: 'unknown' },
-      timestamp: Date,
-    },
-    status: { type: String, enum: ['unprocessed', 'matched', 'error', 'duplicate'], default: 'unprocessed' },
-    userId: { type: String },
-    error: String,
-  }, { timestamps: true });
+class PaymentSms {
+  constructor(data = {}) {
+    this.id = data.id || data._id || crypto.randomUUID();
+    this._id = this.id;
+    this.sender = data.sender;
+    this.body = data.body;
+    this.parsed = data.parsed || {};
+    this.status = data.status || 'unprocessed';
+    this.userId = data.userId || null;
+    this.error = data.error || null;
+    this.createdAt = data.createdAt || new Date().toISOString();
+    this.updatedAt = data.updatedAt || new Date().toISOString();
+  }
 
-  paymentSmsSchema.index({ 'parsed.trxId': 1 });
-  module.exports = mongoose.model('PaymentSms', paymentSmsSchema);
+  async save() {
+    this.updatedAt = new Date().toISOString();
+    const { data, error } = await db
+      .from('PaymentSms')
+      .upsert({
+        id: this.id,
+        sender: this.sender,
+        body: this.body,
+        parsed: this.parsed,
+        status: this.status,
+        userId: this.userId,
+        error: this.error,
+        updatedAt: this.updatedAt
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return this;
+  }
+
+  static async findById(id) {
+    const { data, error } = await db
+      .from('PaymentSms')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return new PaymentSms(data);
+  }
 }
+
+module.exports = PaymentSms;

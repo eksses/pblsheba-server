@@ -16,8 +16,8 @@ const receiveSms = async (req, res) => {
     // 1. Authenticate Request via DB Settings
     let settings = await CacheService.get('system_settings');
     if (!settings) {
-      const Settings = require('../../models/Settings');
-      settings = await Settings.findOne();
+      const { data } = await db.from('Setting').select('*').eq('id', 1).maybeSingle();
+      settings = data;
     }
 
     if (apiKey !== settings?.smsWebhookKey) {

@@ -5,7 +5,7 @@ const express = require('express');
 const connectDB = require('./config/db');
 const mongoose = require('mongoose');
 
-mongoose.set('bufferCommands', true);
+mongoose.set('bufferCommands', false);
 
 // Initial connection attempt for MongoDB (if configured)
 if (process.env.MONGO_URI) {

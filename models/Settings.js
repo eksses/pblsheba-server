@@ -1,26 +1,15 @@
-const mongoose = require('mongoose');
+const db = require('../utils/db');
 
-const settingsSchema = new mongoose.Schema({
-  registrationFee: { type: Number, default: 365 },
-  jobApplicationsEnabled: { type: Boolean, default: true },
-  paymentMethods: { 
-    type: [{
-      name: { type: String, required: true },
-      number: { type: String, required: true },
-      instructions: { type: String },
-      isActive: { type: Boolean, default: true },
-      themeColor: { type: String, default: '#0F9D58' },
-      logoUrl: { type: String }
-    }], 
-    default: [
-      { name: 'bKash', number: '01322511554', instructions: 'Send money to this bKash personal number (01322511554) and enter the TrxID below.', isActive: true, themeColor: '#E2136E', logoUrl: '' },
-      { name: 'Nagad', number: '01700000000', instructions: 'Send money to this Nagad personal number and enter the TrxID below.', isActive: true, themeColor: '#F7931E', logoUrl: '' }
-    ]
-  },
-  employeeCanViewAll: { type: Boolean, default: false },
-  smsWebhookKey: { type: String, default: () => require('crypto').randomBytes(24).toString('hex') }
-}, { timestamps: true });
+class Settings {
+  static async findOne() {
+    const { data } = await db.from('Setting').select('*').eq('id', 1).maybeSingle();
+    return data;
+  }
 
-const Settings = mongoose.model('Settings', settingsSchema);
+  static async findById(id) {
+    const { data } = await db.from('Setting').select('*').eq('id', id || 1).maybeSingle();
+    return data;
+  }
+}
 
 module.exports = Settings;
